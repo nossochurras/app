@@ -1,0 +1,1281 @@
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  MapPin, 
+  ShoppingBag, 
+  ArrowLeft,
+  Search,
+  Plus, 
+  Minus, 
+  CheckCircle,
+  Flame,
+  ChefHat,
+  LayoutGrid,
+  Beef,
+  UtensilsCrossed,
+  Beer,
+  Home,
+  User,
+  Ticket,
+  MessageCircle,
+  CreditCard,
+  ReceiptText,
+  Gift,
+  ChevronRight,
+  LogOut
+} from 'lucide-react';
+
+type Item = {
+  id: number;
+  name: string;
+  category: 'Carnes' | 'Acompanhamentos' | 'Bebidas';
+  desc: string;
+  price: number;
+  image: string;
+};
+
+const MENU: Item[] = [
+  { id: 1, name: 'Picanha Premium', category: 'Carnes', desc: '500g do nosso melhor corte, suculência garantida.', price: 149.9, image: 'https://images.unsplash.com/photo-1558030006-450675393462?auto=format&fit=crop&q=80&w=800' },
+  { id: 2, name: 'Fraldinha na Mostarda', category: 'Carnes', desc: 'Peça marinada com especiarias e mostarda rústica.', price: 119.9, image: 'https://images.unsplash.com/photo-1603048297172-c92544798d5e?auto=format&fit=crop&q=80&w=800' },
+  { id: 3, name: 'Linguiça Artesanal', category: 'Carnes', desc: 'Porção com 400g, sabor autêntico do Empório.', price: 45.0, image: 'https://images.unsplash.com/photo-1535475143306-031f50f28359?auto=format&fit=crop&q=80&w=800' },
+  { id: 4, name: 'Pão de Alho Trufado', category: 'Acompanhamentos', desc: 'Nosso pão de alho especial com toque de trufa e queijo.', price: 28.0, image: 'https://images.unsplash.com/photo-1573140247632-f8fd74997d5c?auto=format&fit=crop&q=80&w=800' },
+  { id: 5, name: 'Farofa da Casa', category: 'Acompanhamentos', desc: 'Com bacon crocante e cebola caramelizada.', price: 22.0, image: 'https://images.unsplash.com/photo-1504113886839-4c224f115d08?auto=format&fit=crop&q=80&w=800' },
+  { id: 6, name: 'Chopp Pilsen Gelado', category: 'Bebidas', desc: 'Estupidamente gelado, 500ml.', price: 15.0, image: 'https://images.unsplash.com/photo-1650381615654-20aeb297486e?auto=format&fit=crop&q=80&w=800' },
+  { id: 7, name: 'Caipirinha de Limão', category: 'Bebidas', desc: 'Limão tahiti, cachaça artesanal e gelo.', price: 24.0, image: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&q=80&w=800' },
+  { id: 8, name: 'Refrigerante Lata', category: 'Bebidas', desc: '350ml.', price: 8.0, image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=800' },
+];
+
+const LOCATIONS = Array.from({ length: 10 }, (_, i) => `Churrasqueira ${i + 1}`);
+
+const GoogleIcon = () => (
+  <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+);
+
+const AppleIcon = () => (
+  <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16.365 7.042c-.084-2.527 2.052-3.753 2.148-3.811-1.183-1.748-3.036-1.986-3.69-2.015-1.583-.162-3.09.939-3.896.939-.807 0-2.046-.918-3.344-.891-1.688.026-3.242.981-4.113 2.502-1.765 3.069-.452 7.618 1.258 10.103.844 1.222 1.83 2.59 3.104 2.54 1.221-.054 1.696-.799 3.177-.799 1.48 0 1.902.799 3.177.773 1.328-.026 2.158-1.246 2.977-2.438.95-1.391 1.341-2.738 1.366-2.812-.03-.014-2.632-1.01-2.716-4.09H16.365zM14.288 3.515c.677-.82 1.135-1.96 1.01-3.095-1.019.041-2.245.679-2.946 1.523-.559.671-1.109 1.841-.958 2.949 1.139.088 2.213-.557 2.894-1.377z" fill="currentColor"/>
+  </svg>
+);
+
+const pageVariants = {
+  initial: { opacity: 0, scale: 0.98 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 1.02 }
+};
+
+const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
+  const branches = [
+    // Galhos principais grossos
+    { d: "M390,0 C320,80 240,120 180,200 C120,280 80,360 40,450 C10,520 -20,600 0,700", w: 22, delay: 0 },
+    { d: "M0,844 C80,760 160,700 220,620 C280,540 310,460 350,370 C380,300 410,220 390,140", w: 22, delay: 0.05 },
+    { d: "M100,0 C140,100 120,180 100,280 C80,370 40,440 20,540 C0,620 10,720 50,844", w: 16, delay: 0.1 },
+    { d: "M290,844 C260,740 280,660 260,560 C240,460 190,400 180,300 C170,210 200,120 220,0", w: 16, delay: 0.08 },
+    { d: "M390,300 C320,320 260,300 200,320 C140,340 80,320 0,340", w: 12, delay: 0.15 },
+    { d: "M0,500 C80,480 160,500 230,480 C300,460 350,480 390,460", w: 12, delay: 0.18 },
+    // Galhos médios
+    { d: "M390,0 C370,40 390,80 360,100 C330,120 290,100 260,130", w: 10, delay: 0.12 },
+    { d: "M180,200 C220,170 260,180 290,150 C320,120 330,80 390,60", w: 8, delay: 0.2 },
+    { d: "M100,280 C140,260 170,240 200,210 C230,180 250,150 280,120", w: 8, delay: 0.22 },
+    { d: "M40,450 C80,420 120,430 160,400 C200,370 220,340 260,320", w: 7, delay: 0.25 },
+    { d: "M0,700 C60,670 100,680 150,650 C200,620 230,590 270,560", w: 7, delay: 0.28 },
+    { d: "M220,620 C180,650 140,640 100,670 C60,700 30,730 0,760", w: 7, delay: 0.2 },
+    { d: "M350,370 C310,400 270,390 230,420 C190,450 160,470 120,500", w: 7, delay: 0.22 },
+    { d: "M390,140 C340,160 300,150 260,180 C220,210 200,240 160,260", w: 7, delay: 0.25 },
+    // Galhos finos
+    { d: "M390,0 C380,20 370,10 355,25 C340,40 345,60 330,70", w: 5, delay: 0.3 },
+    { d: "M360,100 C345,115 330,108 315,120 C300,132 298,148 282,155", w: 5, delay: 0.32 },
+    { d: "M290,150 C278,165 265,160 252,175 C239,190 240,208 225,215", w: 5, delay: 0.34 },
+    { d: "M200,320 C188,335 175,330 162,345 C149,360 150,378 135,385", w: 5, delay: 0.36 },
+    { d: "M150,650 C138,665 125,660 112,675 C99,690 100,708 85,715", w: 5, delay: 0.3 },
+    { d: "M270,560 C258,575 245,570 232,585 C219,600 220,618 205,625", w: 5, delay: 0.32 },
+    { d: "M0,340 C20,325 35,330 50,315 C65,300 66,282 82,275", w: 5, delay: 0.34 },
+    { d: "M0,500 C25,488 40,492 58,478 C76,464 78,446 96,440", w: 5, delay: 0.36 },
+    { d: "M100,0 C88,22 92,38 78,52 C64,66 46,64 35,80", w: 5, delay: 0.38 },
+    { d: "M220,0 C210,25 215,42 200,56 C185,70 166,68 155,85", w: 5, delay: 0.4 },
+    { d: "M50,844 C62,820 58,804 74,790 C90,776 108,778 120,762", w: 5, delay: 0.3 },
+    { d: "M290,844 C278,820 282,804 268,790 C254,776 236,778 225,762", w: 5, delay: 0.32 },
+  ];
+
+  // Folhas espalhadas por toda a tela
+  const leaves = [
+    // Cluster topo direito
+    [375,8],[360,18],[385,28],[348,12],[370,35],[358,42],[342,28],[390,50],
+    // Cluster topo meio
+    [215,15],[228,28],[202,32],[240,22],[218,42],[195,20],
+    // Cluster galho direito alto  
+    [325,72],[338,62],[312,80],[348,88],[328,95],[308,68],
+    [278,125],[292,115],[265,132],[285,145],[260,118],
+    // Cluster meio direito
+    [255,182],[268,172],[242,190],[272,198],[248,168],
+    [195,212],[208,202],[182,220],[212,228],[188,198],
+    // Cluster centro
+    [155,262],[168,252],[142,270],[172,278],[148,248],
+    [130,388],[143,378],[117,396],[147,404],[123,374],
+    [200,325],[213,315],[187,333],[217,341],[193,311],
+    // Cluster esquerdo
+    [48,318],[62,308],[35,326],[66,334],[42,304],
+    [92,443],[105,433],[79,451],[109,459],[85,429],
+    [18,543],[32,533],[5,551],[36,559],[12,529],
+    [42,678],[55,668],[28,686],[60,694],[36,664],
+    // Cluster topo esquerdo
+    [78,55],[92,45],[65,63],[96,71],[72,41],
+    [32,83],[46,73],[19,91],[50,99],[26,69],
+    // Cluster inferior
+    [80,718],[94,708],[67,726],[98,734],[74,704],
+    [148,653],[162,643],[135,661],[166,669],[142,639],
+    [108,768],[122,758],[95,776],[126,784],[102,754],
+    [222,765],[236,755],[209,773],[240,781],[218,751],
+    [268,592],[282,582],[255,600],[286,608],[262,578],
+    [205,628],[219,618],[192,636],[223,644],[199,614],
+    // Cluster direito baixo
+    [348,372],[362,362],[335,380],[366,388],[342,358],
+    [315,422],[328,412],[302,430],[332,438],[308,408],
+    [272,562],[285,552],[259,570],[289,578],[265,548],
+    [232,422],[245,412],[219,430],[249,438],[225,408],
+    // Galho horizontal meio
+    [88,322],[102,315],[75,330],[106,338],[82,312],
+    [170,342],[183,335],[157,350],[187,358],[163,332],
+    [242,332],[255,325],[229,340],[259,348],[235,322],
+    [318,312],[331,305],[305,320],[335,328],[311,302],
+    // Galho horizontal baixo
+    [58,482],[72,475],[45,490],[76,498],[52,472],
+    [142,462],[155,455],[129,470],[159,478],[135,452],
+    [215,472],[228,465],[202,480],[232,488],[208,462],
+    [295,452],[308,445],[282,460],[312,468],[288,442],
+    [358,462],[371,455],[345,470],[375,478],[351,452],
+  ].map(([cx, cy], i) => ({ cx, cy, r: i % 3 === 0 ? 6 : i % 3 === 1 ? 5 : 4, delay: 0.3 + (i * 0.008) }));
+
+  return (
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div
+          className="fixed inset-0 z-[1000] pointer-events-none"
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ exit: { duration: 0.4, delay: 0.1 } }}
+        >
+          <svg
+            className="absolute inset-0 w-full h-full"
+            viewBox="0 0 390 844"
+            preserveAspectRatio="xMidYMid slice"
+          >
+            <rect width="390" height="844" fill="#f5ede0" />
+            
+            {branches.map((b, i) => (
+              <motion.path
+                key={i}
+                d={b.d}
+                stroke="#7b3f1a"
+                strokeWidth={b.w}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                exit={{ pathLength: 0, opacity: 0 }}
+                transition={{ duration: 0.5, delay: b.delay, ease: "easeInOut" }}
+              />
+            ))}
+
+            {leaves.map((l, i) => (
+              <motion.circle
+                key={`l${i}`}
+                cx={l.cx} cy={l.cy} r={l.r}
+                fill="#7b3f1a"
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                transition={{ duration: 0.2, delay: l.delay }}
+              />
+            ))}
+          </svg>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+export default function App() {
+  const [view, setView] = useState<'auth' | 'register' | 'welcome' | 'location' | 'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support'>('auth');
+  const [location, setLocation] = useState<string>('');
+  const [cart, setCart] = useState<{item: Item, quantity: number}[]>([]);
+  const [orderCode, setOrderCode] = useState<string>('');
+  const [loginAnim, setLoginAnim] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showAllLocations, setShowAllLocations] = useState(false);
+
+  const handleLoginClick = () => {
+    setLoginAnim(true);
+    setTimeout(() => {
+      setView('location');
+      setTimeout(() => {
+        setLoginAnim(false);
+      }, 100);
+    }, 900);
+  };
+
+  const handleAddToCart = (item: Item) => {
+    setCart(prev => {
+      const existing = prev.find(i => i.item.id === item.id);
+      if (existing) {
+        return prev.map(i => i.item.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+      return [...prev, { item, quantity: 1 }];
+    });
+  };
+
+  const handleRemoveFromCart = (itemId: number) => {
+    setCart(prev => {
+      const existing = prev.find(i => i.item.id === itemId);
+      if (existing && existing.quantity > 1) {
+        return prev.map(i => i.item.id === itemId ? { ...i, quantity: i.quantity - 1 } : i);
+      }
+      return prev.filter(i => i.item.id !== itemId);
+    });
+  };
+
+  const cartTotal = cart.reduce((acc, curr) => acc + (curr.item.price * curr.quantity), 0);
+  const cartCount = cart.reduce((acc, curr) => acc + curr.quantity, 0);
+
+  return (
+    <div className="font-sans min-h-screen bg-brand-cream text-brand-dark selection:bg-brand-red selection:text-white pb-safe max-w-md mx-auto shadow-2xl relative bg-[url('https://www.transparenttextures.com/patterns/rice-paper-2.png')] overflow-hidden">
+      
+      <BranchTransition isVisible={loginAnim} />
+
+      <AnimatePresence mode="wait">
+        
+        {/* AUTH SCREEN */}
+        {view === 'auth' && (
+          <motion.div
+            key="auth"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="min-h-screen bg-brand-cream flex flex-col p-6 relative z-10"
+          >
+            <div className="flex-1 flex flex-col justify-center relative z-10 w-full mt-4">
+              <div className="flex flex-col items-center mb-8 w-full">
+                <span className="text-brand-dark/50 text-sm font-bold tracking-[0.2em] uppercase mb-0 mt-3 relative z-20">Bem vindo ao</span>
+                <div className="relative flex items-center justify-center w-full h-[240px] pointer-events-none" style={{ overflow: 'visible', marginTop: '24px' }}>
+                  <img 
+                    src="/logo.png" 
+                    alt="Praça Nosso Churras" 
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-auto object-contain z-10 select-none"
+                    style={{ 
+                      width: '140vw',
+                      maxWidth: '560px',
+                      filter: 'drop-shadow(0px 8px 12px rgba(26, 9, 5, 0.15))',
+                      marginLeft: '8%'
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "https://placehold.co/800x600/transparent/1a0905.png?text=Pra%C3%A7a+Nosso+Churras";
+                    }}
+                  />
+                </div>
+                
+                <p className="text-brand-dark/70 text-center text-sm font-medium mt-0 relative z-20">Faça login para continuar sua resenha</p>
+              </div>
+
+              <div className="space-y-4 w-full max-w-sm mx-auto">
+                <div className="flex flex-col gap-3">
+                  <button onClick={handleLoginClick} className="w-full bg-white border border-brand-gold/20 text-brand-dark p-4 rounded-2xl flex items-center justify-center gap-3 font-semibold shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
+                    <GoogleIcon />
+                    Continuar com Google
+                  </button>
+                  <button onClick={handleLoginClick} className="w-full bg-black text-white p-4 rounded-2xl flex items-center justify-center gap-3 font-semibold shadow-sm hover:bg-gray-900 transition active:scale-[0.98]">
+                    <AppleIcon />
+                    Continuar com Apple
+                  </button>
+                </div>
+
+                <div className="relative flex items-center py-4">
+                  <div className="flex-grow border-t border-brand-gold/30"></div>
+                  <span className="flex-shrink-0 mx-4 text-brand-dark/40 text-sm font-bold uppercase">ou</span>
+                  <div className="flex-grow border-t border-brand-gold/30"></div>
+                </div>
+
+                <button onClick={() => setView('register')} className="w-full bg-brand-red text-white p-4 rounded-2xl font-bold tracking-wide flex items-center justify-center shadow-lg hover:bg-red-700 transition active:scale-[0.98]">
+                  Fazer Cadastro
+                </button>
+              </div>
+            </div>
+            <div className="text-center mt-auto pb-4">
+               <p className="text-xs text-brand-dark/50">Ao continuar, você concorda com nossos Termos e Condições.</p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* REGISTER SCREEN */}
+        {view === 'register' && (
+          <motion.div
+            key="register"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="min-h-screen bg-brand-cream flex flex-col p-6 relative z-10"
+          >
+            <button onClick={() => setView('auth')} className="absolute top-6 left-6 p-2 bg-white rounded-full shadow-sm hover:bg-brand-gold/10 transition z-20">
+              <ArrowLeft size={24} className="text-brand-dark" />
+            </button>
+            
+            <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full mt-12">
+              <div className="mb-8">
+                <h2 className="font-display text-4xl text-brand-dark mb-2">Criar Conta</h2>
+                <p className="text-brand-dark/70">Preencha seus dados para entrar na roda.</p>
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); setView('welcome'); }} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-brand-dark/70 uppercase tracking-wider mb-1.5 ml-1">Nome Completo</label>
+                  <input type="text" required placeholder="João da Silva" className="w-full bg-white border border-brand-gold/30 rounded-2xl p-4 text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:ring-2 focus:ring-brand-red/50 shadow-sm transition" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-brand-dark/70 uppercase tracking-wider mb-1.5 ml-1">Telefone</label>
+                  <input type="tel" required placeholder="(11) 99999-9999" className="w-full bg-white border border-brand-gold/30 rounded-2xl p-4 text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:ring-2 focus:ring-brand-red/50 shadow-sm transition" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-brand-dark/70 uppercase tracking-wider mb-1.5 ml-1">E-mail</label>
+                  <input type="email" required placeholder="joao@exemplo.com" className="w-full bg-white border border-brand-gold/30 rounded-2xl p-4 text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:ring-2 focus:ring-brand-red/50 shadow-sm transition" />
+                </div>
+
+                <div className="pt-4">
+                  <button type="submit" className="w-full bg-brand-red text-white p-4 rounded-2xl font-bold tracking-wide flex items-center justify-center shadow-lg hover:bg-red-700 transition active:scale-[0.98]">
+                    Finalizar Cadastro
+                  </button>
+                </div>
+              </form>
+            </div>
+          </motion.div>
+        )}
+
+        {/* WELCOME SCREEN */}
+        {view === 'welcome' && (
+          <motion.div
+            key="welcome"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="min-h-screen bg-brand-cream flex flex-col items-center justify-center p-6 text-center relative z-10"
+          >
+            {/* Background Texture Feel */}
+            <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-brand-dark via-brand-dark to-brand-dark pointer-events-none"></div>
+
+            <div className="relative z-10 flex flex-col items-center w-full">
+              <div className="relative flex items-center justify-center w-full h-[240px] pointer-events-none mb-6" style={{ overflow: 'visible' }}>
+                <img 
+                  src="/logo.png" 
+                  alt="Praça Nosso Churras" 
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-auto object-contain z-10 select-none animate-[pulse_4s_ease-in-out_infinite]"
+                  style={{ 
+                    width: '140vw',
+                    maxWidth: '560px',
+                    filter: 'drop-shadow(0px 8px 12px rgba(26, 9, 5, 0.15))',
+                    marginLeft: '8%'
+                  }}
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = "https://placehold.co/800x600/transparent/1a0905.png?text=Pra%C3%A7a+Nosso+Churras";
+                  }}
+                />
+              </div>
+              
+              <p className="font-sans text-lg mb-12 text-brand-dark/80 max-w-[280px] sm:max-w-xs mx-auto font-medium relative z-20">
+                Onde a qualidade encontra o encontro. Seu churrasco favorito.
+              </p>
+              
+              <button 
+                onClick={() => setView('location')} 
+                className="group relative bg-brand-red text-brand-cream text-lg font-bold uppercase tracking-wider py-4 px-12 md:px-16 rounded-full overflow-hidden shadow-[0_0_20px_rgba(183,53,39,0.3)] hover:shadow-[0_0_30px_rgba(183,53,39,0.5)] hover:scale-105 active:scale-95 transition-all duration-300"
+              >
+                <div className="absolute inset-0 w-full h-full bg-white/20 scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-300"></div>
+                <span className="relative z-10">Fazer Pedido</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* LOCATION SCREEN */}
+        {view === 'location' && (
+          <motion.div
+            key="location"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="min-h-screen flex flex-col p-6 pt-12"
+          >
+            <div className="flex items-center mb-6">
+              <button onClick={() => setView('welcome')} className="p-2 -ml-2 hover:bg-brand-gold/20 rounded-full transition w-fit">
+                <ArrowLeft size={28} className="text-brand-dark" />
+              </button>
+            </div>
+            <h2 className="font-display text-4xl text-brand-dark mb-2">Onde a resenha tá rolando?</h2>
+            <p className="text-brand-dark/70 mb-6">Selecione ou busque o número da sua churrasqueira.</p>
+            
+            <div className="relative mb-6">
+              <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                <Search size={20} className="text-brand-dark/40" />
+              </div>
+              <input
+                type="number"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Qual o número?"
+                className="w-full bg-white border-2 border-brand-gold/20 rounded-2xl py-4 pl-12 pr-4 text-lg font-bold text-brand-dark focus:outline-none focus:border-brand-red placeholder:text-brand-dark/40 shadow-sm"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto hide-scrollbar pb-8 -mx-2 px-2">
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 mb-8">
+                {Array.from({ length: 75 }, (_, i) => i + 1)
+                  .filter(num => !searchTerm || num.toString().includes(searchTerm))
+                  .slice(0, showAllLocations || searchTerm ? undefined : 10)
+                  .map(num => (
+                  <button 
+                    key={num}
+                    onClick={() => { setLocation(`Churrasqueira ${num}`); setView('menu'); }} 
+                    className="bg-white border-2 border-brand-gold/20 aspect-square rounded-2xl flex flex-col items-center justify-center gap-1 hover:border-brand-red hover:bg-brand-red hover:text-white transition-all text-brand-dark shadow-sm group"
+                  >
+                    <span className="text-2xl font-black group-hover:scale-110 transition-transform">{num}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-60 group-hover:opacity-100">Churr.</span>
+                  </button>
+                ))}
+                {!searchTerm && (
+                  <button
+                    onClick={() => setShowAllLocations(!showAllLocations)}
+                    className="col-span-full mt-2 py-3 border-2 border-dashed border-brand-gold/40 text-brand-dark rounded-xl font-bold hover:bg-brand-gold/10 transition-colors"
+                  >
+                    {showAllLocations ? "Ocultar churrasqueiras" : "Ver todas as churrasqueiras"}
+                  </button>
+                )}
+                {Array.from({ length: 75 }, (_, i) => i + 1).filter(num => !searchTerm || num.toString().includes(searchTerm)).length === 0 && (
+                   <div className="col-span-full py-8 text-center text-brand-dark/50 font-medium">Nenhuma churrasqueira encontrada com "{searchTerm}".</div>
+                )}
+              </div>
+              
+              <button 
+                onClick={() => { setLocation('Retirada no Balcão'); setView('menu'); }} 
+                className="w-full bg-brand-dark text-brand-cream p-5 rounded-2xl flex items-center justify-center gap-3 hover:bg-black hover:scale-[1.02] shadow-xl transition-all font-bold sticky bottom-4 z-10"
+              >
+                <ShoppingBag className="text-brand-gold" size={24} />
+                <span className="text-lg">Zerar a brasa (Retirada)</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* MENU SCREEN */}
+        {view === 'menu' && (
+          <MenuScreen 
+            location={location} 
+            cartCount={cartCount}
+            cartTotal={cartTotal}
+            onBack={() => setView('location')} 
+            onCart={() => setView('cart')}
+            onProfile={() => setView('profile')}
+            onCoupons={() => setView('coupons')}
+            onSupport={() => setView('support')}
+            cartItems={cart}
+            onAdd={handleAddToCart}
+            onRemove={handleRemoveFromCart}
+          />
+        )}
+
+        {/* CART SCREEN */}
+        {view === 'cart' && (
+          <CartScreen
+             cart={cart}
+             location={location}
+             cartTotal={cartTotal}
+             onBack={() => setView('menu')}
+             onAdd={handleAddToCart}
+             onRemove={handleRemoveFromCart}
+             onCheckout={() => {
+                setView('checkout');
+             }}
+          />
+        )}
+
+        {/* CHECKOUT SCREEN */}
+        {view === 'checkout' && (
+          <CheckoutScreen
+            location={location}
+            cartTotal={cartTotal}
+            onBack={() => setView('cart')}
+            onFinalize={() => {
+              if (location === 'Retirada no Balcão') {
+                const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+                setOrderCode(code);
+              } else {
+                setOrderCode(Math.floor(Math.random()*1000).toString().padStart(3, '0'));
+              }
+              setView('success');
+            }}
+          />
+        )}
+
+        {/* PROFILE SCREEN */}
+        {(view === 'profile' || view === 'coupons') && (
+          <ProfileScreen 
+            key={view}
+            cartCount={cartCount}
+            initialSubView={view === 'coupons' ? 'coupons' : 'main'}
+            onBack={() => setView('menu')}
+            onCart={() => setView('cart')}
+            onHome={() => setView('location')}
+            onCoupons={() => setView('coupons')}
+            onProfile={() => setView('profile')}
+            onSupport={() => setView('support')}
+          />
+        )}
+
+        {/* SUPPORT SCREEN */}
+        {view === 'support' && (
+          <SupportScreen
+            cartCount={cartCount}
+            onBack={() => setView('menu')}
+            onNavigate={(tab: string) => {
+               if (tab === 'home') setView('location');
+               if (tab === 'coupons') setView('coupons');
+               if (tab === 'cart') setView('cart');
+               if (tab === 'profile') setView('profile');
+            }}
+          />
+        )}
+
+        {/* SUCCESS SCREEN */}
+        {view === 'success' && (
+          <motion.div
+            key="success"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="min-h-screen bg-brand-red text-white flex flex-col items-center justify-center p-6 text-center"
+          >
+            <motion.div 
+               initial={{ scale: 0 }} 
+               animate={{ scale: 1 }} 
+               transition={{ type: 'spring', bounce: 0.5, delay: 0.2 }}
+            >
+              <ChefHat size={80} className="text-brand-gold mb-6 mx-auto" />
+            </motion.div>
+            <h1 className="font-display text-5xl mb-4">Pedido na Brasa!</h1>
+            <p className="text-brand-cream/90 text-lg mb-8 max-w-sm">
+              Tudo anotado para o seu momento. {location === 'Retirada no Balcão' ? 'Apresente o código abaixo no balcão para retirar.' : 'Aproveite a resenha enquanto levamos seu churrasco.'}
+            </p>
+            <div className="bg-brand-dark w-full max-w-sm p-8 rounded-3xl mb-8 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-brand-gold"></div>
+              <div className="text-brand-gold text-xs font-bold uppercase tracking-widest mb-2">Seu Local</div>
+              <div className="text-xl mb-6">{location}</div>
+              {location === 'Retirada no Balcão' ? (
+                <>
+                  <div className="text-brand-gold text-xs font-bold uppercase tracking-widest mb-2">Código de Retirada</div>
+                  <div className="font-display text-6xl text-brand-cream tracking-widest">{orderCode}</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-brand-gold text-xs font-bold uppercase tracking-widest mb-2">Número do Pedido</div>
+                  <div className="font-display text-6xl text-brand-cream">#{orderCode}</div>
+                </>
+              )}
+            </div>
+            <button 
+              onClick={() => {
+                setCart([]);
+                setOrderCode('');
+                setView('welcome');
+              }} 
+              className="bg-brand-cream text-brand-red font-bold text-lg py-4 px-10 rounded-full hover:scale-105 transition shadow-xl"
+            >
+              Voltar ao Início
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+const CATEGORY_TABS = [
+  { id: 'Todos', label: 'Tudo', icon: LayoutGrid, color: 'text-brand-dark' },
+  { id: 'Carnes', label: 'Cortes', icon: Beef, color: 'text-brand-red' },
+  { id: 'Acompanhamentos', label: 'Acomp.', icon: UtensilsCrossed, color: 'text-brand-gold' },
+  { id: 'Bebidas', label: 'Bebidas', icon: Beer, color: 'text-yellow-600' },
+];
+
+function MenuScreen({ location, cartCount, cartTotal, onBack, onCart, onProfile, onCoupons, onSupport, cartItems, onAdd, onRemove }: any) {
+  const [activeCat, setActiveCat] = useState<'Todos' | 'Carnes' | 'Acompanhamentos' | 'Bebidas'>('Todos');
+
+  const filteredMenu = activeCat === 'Todos' ? MENU : MENU.filter(i => i.category === activeCat);
+
+  return (
+    <motion.div
+      key="menu"
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="min-h-screen flex flex-col bg-brand-cream pb-32"
+    >
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-40 bg-brand-dark text-brand-cream px-6 py-4 flex items-center justify-between shadow-md">
+        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-brand-gold/20 transition">
+          <ArrowLeft size={24} />
+        </button>
+        <div className="text-center flex-1">
+          <div className="text-[10px] text-brand-gold font-bold uppercase tracking-[0.2em] mb-0.5">Local</div>
+          <div className="font-display text-xl leading-none">{location}</div>
+        </div>
+        <button onClick={onCart} className="relative p-2 -mr-2 hover:bg-brand-gold/20 rounded-full transition">
+           <ShoppingBag size={24} />
+           {cartCount > 0 && (
+             <motion.span 
+               initial={{ scale: 0 }} 
+               animate={{ scale: 1 }} 
+               className="absolute top-1 right-1 bg-brand-red text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center border-2 border-brand-dark"
+             >
+               {cartCount}
+             </motion.span>
+           )}
+        </button>
+      </div>
+
+      {/* Category Tabs (Méqui Style) */}
+      <div className="sticky top-[72px] z-30 bg-brand-cream/95 backdrop-blur-md pt-4 pb-4 shadow-sm border-b border-brand-gold/10">
+        <div className="flex overflow-x-auto gap-3 px-6 hide-scrollbar snap-x">
+          {CATEGORY_TABS.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeCat === tab.id;
+            return (
+              <button 
+                key={tab.id}
+                onClick={() => setActiveCat(tab.id as any)}
+                className={`flex flex-col items-center gap-2 snap-start min-w-[76px] p-2 rounded-2xl transition-all duration-300 ${
+                  isActive ? 'bg-white shadow-md scale-105' : 'bg-transparent hover:bg-white/50 scale-100'
+                }`}
+              >
+                <div className={`w-14 h-14 rounded-xl flex items-center justify-center transition-colors ${
+                  isActive ? 'bg-brand-red text-white shadow-inner' : 'bg-white text-brand-dark shadow-sm border border-brand-gold/10'
+                }`}>
+                  <Icon size={28} className={isActive ? 'text-white' : tab.color} />
+                </div>
+                <span className={`text-xs font-bold tracking-tight transition-colors ${
+                  isActive ? 'text-brand-red' : 'text-brand-dark/70'
+                }`}>
+                  {tab.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Item List */}
+      <div className="p-6 space-y-6">
+        <AnimatePresence mode="popLayout">
+          {filteredMenu.map(item => {
+             const cartItem = cartItems.find(i => i.item.id === item.id);
+             return (
+               <motion.div 
+                 layout
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 exit={{ opacity: 0, scale: 0.95 }}
+                 key={item.id} 
+                 className="bg-white rounded-3xl overflow-hidden shadow-sm border border-brand-gold/20 flex flex-col hover:shadow-md transition"
+               >
+                 <div className="h-48 relative overflow-hidden bg-brand-cream">
+                   <img src={item.image} alt={item.name} className="w-full h-full object-cover hover:scale-105 transition duration-500" />
+                   <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-brand-dark">
+                     {item.category}
+                   </div>
+                 </div>
+                 <div className="p-5 flex-1 flex flex-col">
+                   <div className="flex justify-between items-start mb-2">
+                     <h3 className="font-display text-2xl text-brand-dark leading-tight max-w-[70%]">{item.name}</h3>
+                     <span className="font-display text-xl text-brand-red whitespace-nowrap leading-tight">
+                       R$ {item.price.toFixed(2).replace('.', ',')}
+                     </span>
+                   </div>
+                   <p className="text-brand-dark/60 text-sm mb-6 flex-1 leading-relaxed">{item.desc}</p>
+                   
+                   <div className="mt-auto flex justify-end">
+                     {cartItem ? (
+                       <div className="flex items-center gap-4 bg-brand-cream rounded-full p-1 border border-brand-gold/40 shadow-inner">
+                         <button onClick={() => onRemove(item.id)} className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-brand-dark hover:bg-brand-red hover:text-white transition shadow-sm"><Minus size={18} /></button>
+                         <span className="font-bold text-lg w-4 text-center">{cartItem.quantity}</span>
+                         <button onClick={() => onAdd(item)} className="w-10 h-10 bg-brand-red rounded-full flex items-center justify-center text-white hover:bg-red-700 transition shadow-sm"><Plus size={18} /></button>
+                       </div>
+                     ) : (
+                        <button onClick={() => onAdd(item)} className="bg-brand-dark text-brand-gold px-8 py-3 rounded-full font-bold text-sm hover:bg-black transition flex items-center gap-2 shadow-md">
+                          <Plus size={18} /> Adicionar
+                        </button>
+                     )}
+                   </div>
+                 </div>
+               </motion.div>
+             );
+          })}
+        </AnimatePresence>
+      </div>
+
+      {/* Floating Checkout Button */}
+      <AnimatePresence>
+        {cartCount > 0 && (
+          <motion.div 
+            initial={{ y: 150 }} 
+            animate={{ y: 0 }} 
+            exit={{ y: 150 }} 
+            className="fixed bottom-[80px] left-0 right-0 p-6 z-50 pointer-events-none"
+          >
+            <div className="max-w-md mx-auto pointer-events-auto">
+              <button 
+                onClick={onCart}
+                className="w-full bg-brand-red text-white p-5 rounded-2xl flex items-center justify-between font-bold shadow-2xl hover:bg-red-700 transition hover:-translate-y-1"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/20 w-8 h-8 rounded-full flex items-center justify-center text-sm">{cartCount}</div>
+                  <span className="text-lg">Ver Pedido</span>
+                </div>
+                <div className="text-xl font-display tracking-widest">
+                  R$ {cartTotal.toFixed(2).replace('.', ',')}
+                </div>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom App Navigation */}
+      <BottomNav activeTab="home" cartCount={cartCount} onNavigate={(tab) => {
+        if (tab === 'home') onBack();
+        if (tab === 'cart') onCart();
+        if (tab === 'profile') onProfile();
+        if (tab === 'coupons') onCoupons();
+        if (tab === 'support') onSupport();
+      }} />
+    </motion.div>
+  );
+}
+
+function CartScreen({ cart, location, cartTotal, onBack, onAdd, onRemove, onCheckout }) {
+  return (
+    <motion.div
+      key="cart"
+      variants={pageVariants}
+      initial={{ opacity: 0, y: 50 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 50 }}
+      className="min-h-screen bg-brand-cream pb-40 flex flex-col"
+    >
+      <div className="sticky top-0 z-40 bg-brand-cream/90 backdrop-blur-md px-6 py-4 flex items-center justify-between shadow-sm">
+        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-brand-gold/20 transition">
+          <ArrowLeft size={28} className="text-brand-dark" />
+        </button>
+        <h2 className="font-display text-2xl absolute left-1/2 -translate-x-1/2">Seu Pedido</h2>
+      </div>
+
+      <div className="p-6 flex-1">
+        {cart.length === 0 ? (
+           <div className="flex flex-col items-center justify-center h-[50vh] text-brand-dark/50">
+             <ShoppingBag size={64} className="mb-4 opacity-50" />
+             <p className="text-lg font-bold">Nenhum item na brasa ainda!</p>
+             <button onClick={onBack} className="mt-6 text-brand-red font-bold underline">Voltar pro Menu</button>
+           </div>
+        ) : (
+          <div className="space-y-4">
+            <AnimatePresence>
+              {cart.map(({item, quantity}) => (
+                <motion.div 
+                  key={item.id} 
+                  layout
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, x: -100 }}
+                  className="bg-white p-4 rounded-2xl shadow-sm border border-brand-gold/20 flex items-center gap-4"
+                >
+                   <img src={item.image} alt={item.name} className="w-16 h-16 rounded-xl object-cover" />
+                   <div className="flex-1">
+                     <h4 className="font-bold text-brand-dark leading-tight mb-1">{item.name}</h4>
+                     <div className="text-brand-red font-display tracking-wider">R$ {(item.price * quantity).toFixed(2).replace('.', ',')}</div>
+                   </div>
+                   <div className="flex flex-col items-center gap-1 bg-brand-cream rounded-full px-1 py-1 border border-brand-gold/30">
+                      <button onClick={() => onAdd(item)} className="w-8 h-8 flex items-center justify-center text-brand-red hover:bg-white rounded-full transition"><Plus size={14}/></button>
+                      <span className="font-bold text-sm w-4 text-center">{quantity}</span>
+                      <button onClick={() => onRemove(item.id)} className="w-8 h-8 flex items-center justify-center text-brand-dark hover:bg-white rounded-full transition"><Minus size={14}/></button>
+                   </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            <motion.div layout className="mt-8 bg-brand-dark text-brand-cream p-6 rounded-3xl shadow-xl relative overflow-hidden">
+               <div className="absolute -right-4 -top-4 opacity-10">
+                 <Flame size={120} />
+               </div>
+               <h3 className="font-display text-2xl mb-6 text-brand-gold">Resumo do Encontro</h3>
+               <div className="flex justify-between items-center mb-4 text-brand-cream/80 border-b border-brand-cream/10 pb-4">
+                 <span>Mesa / Local</span>
+                 <span className="font-bold text-white text-right break-words max-w-[60%]">{location}</span>
+               </div>
+               <div className="flex justify-between items-center text-2xl font-display pt-2">
+                 <span>Total</span>
+                 <span className="text-brand-red">R$ {cartTotal.toFixed(2).replace('.', ',')}</span>
+               </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
+
+      {cart.length > 0 && (
+         <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-brand-cream via-brand-cream to-transparent z-50">
+           <div className="max-w-md mx-auto">
+             <button 
+               onClick={onCheckout}
+               className="w-full bg-brand-red text-white p-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-xl shadow-2xl hover:bg-red-700 transition hover:-translate-y-1 font-display tracking-widest uppercase"
+             >
+               Confirmar Pedido
+             </button>
+           </div>
+         </div>
+      )}
+    </motion.div>
+  );
+}
+
+function CheckoutScreen({ location, cartTotal, onBack, onFinalize }) {
+  const [paymentType, setPaymentType] = useState<'app' | 'local'>('app');
+
+  return (
+    <motion.div
+      key="checkout"
+      variants={pageVariants}
+      initial={{ opacity: 0, x: 100 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 100 }}
+      className="min-h-screen bg-brand-cream pb-40 flex flex-col"
+    >
+      <div className="sticky top-0 z-40 bg-brand-cream/90 backdrop-blur-md px-6 py-4 flex items-center justify-between shadow-sm">
+        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-brand-gold/20 transition">
+          <ArrowLeft size={28} className="text-brand-dark" />
+        </button>
+        <h2 className="font-display text-2xl absolute left-1/2 -translate-x-1/2">Pagamento</h2>
+      </div>
+
+      <div className="p-6 flex-1 flex flex-col">
+        <h3 className="text-xl font-bold text-brand-dark mb-4">Escolha a forma de pagamento</h3>
+        <p className="text-sm text-brand-dark/70 mb-8 border-b border-brand-gold/20 pb-4">
+          Você pode pagar agora pelo App com Cartão/PIX, ou pagar no momento da {location === 'Retirada no Balcão' ? 'retirada' : 'entrega'}.
+        </p>
+
+        <div className="space-y-4">
+          <button 
+            onClick={() => setPaymentType('app')}
+            className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${
+              paymentType === 'app' ? 'border-brand-red bg-white shadow-lg scale-100' : 'border-brand-gold/20 bg-transparent hover:bg-white/50 scale-[0.98]'
+            }`}
+          >
+            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+              paymentType === 'app' ? 'border-brand-red' : 'border-brand-gold'
+            }`}>
+              {paymentType === 'app' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full"></motion.div>}
+            </div>
+            <div className="flex-1 text-left">
+              <div className="font-bold text-brand-dark">Pagar pelo App</div>
+              <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
+                <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
+                <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">PIX</span>
+              </div>
+            </div>
+          </button>
+
+          <button 
+            onClick={() => setPaymentType('local')}
+            className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${
+              paymentType === 'local' ? 'border-brand-red bg-white shadow-lg scale-100' : 'border-brand-gold/20 bg-transparent hover:bg-white/50 scale-[0.98]'
+            }`}
+          >
+            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+              paymentType === 'local' ? 'border-brand-red' : 'border-brand-gold'
+            }`}>
+              {paymentType === 'local' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full"></motion.div>}
+            </div>
+            <div className="flex-1 text-left">
+              <div className="font-bold text-brand-dark">Pagar {location === 'Retirada no Balcão' ? 'na Retirada' : 'no Local'}</div>
+              <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
+                <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
+                <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Benefício</span>
+              </div>
+            </div>
+          </button>
+        </div>
+        
+        <div className="mt-auto pt-8">
+           <div className="bg-brand-dark text-brand-cream p-6 rounded-3xl shadow-xl flex items-center justify-between">
+              <div>
+                 <div className="text-brand-gold text-xs font-bold uppercase tracking-widest mb-1">Total a Pagar</div>
+                 <div className="font-display text-3xl">R$ {cartTotal.toFixed(2).replace('.', ',')}</div>
+              </div>
+              <Flame size={40} className="text-brand-red opacity-50" />
+           </div>
+        </div>
+      </div>
+
+       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-brand-cream via-brand-cream to-transparent z-50">
+         <div className="max-w-md mx-auto">
+           <button 
+             onClick={onFinalize}
+             className="w-full bg-brand-red text-white p-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-xl shadow-2xl hover:bg-red-700 transition hover:-translate-y-1 font-display tracking-widest uppercase"
+           >
+             Finalizar Pedido
+           </button>
+         </div>
+       </div>
+    </motion.div>
+  );
+}
+
+function BottomNav({ activeTab, cartCount, onNavigate }: { activeTab: string, cartCount: number, onNavigate: (tab: string) => void }) {
+  return (
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-brand-gold/20 flex justify-between items-center pt-3 pb-safe-bottom z-[60] shadow-[0_-10px_30px_rgba(0,0,0,0.05)] text-brand-dark max-w-md mx-auto px-4">
+      <button className={`flex flex-col items-center gap-1 p-1 sm:p-2 relative ${activeTab === 'home' ? 'text-brand-red' : 'text-brand-dark/40 hover:text-brand-dark'}`} onClick={() => onNavigate('home')}>
+        <Home size={24} className={activeTab === 'home' ? 'fill-brand-red/20' : ''} />
+        <span className="text-[10px] font-bold">Início</span>
+      </button>
+      <button className={`flex flex-col items-center gap-1 p-1 sm:p-2 ${activeTab === 'coupons' ? 'text-brand-red' : 'text-brand-dark/40 hover:text-brand-dark'}`} onClick={() => onNavigate('coupons')}>
+        <Ticket size={24} className={activeTab === 'coupons' ? 'fill-brand-red/20' : ''} />
+        <span className="text-[10px] font-bold">Cupons</span>
+      </button>
+      <button className={`flex flex-col items-center gap-1 p-1 sm:p-2 ${activeTab === 'support' ? 'text-[#25D366]' : 'text-brand-dark/40 hover:text-brand-dark'}`} onClick={() => onNavigate('support')}>
+        <MessageCircle size={24} className={activeTab === 'support' ? 'text-[#25D366] fill-[#25D366]/20' : 'text-[#25D366]'} />
+        <span className="text-[10px] font-bold">Suporte</span>
+      </button>
+      <button className={`flex flex-col items-center gap-1 p-1 sm:p-2 relative ${activeTab === 'cart' ? 'text-brand-red' : 'text-brand-dark/40 hover:text-brand-dark'}`} onClick={() => onNavigate('cart')}>
+        <ShoppingBag size={24} className={activeTab === 'cart' ? 'fill-brand-red/20' : ''} />
+        <span className="text-[10px] font-bold">Pedido</span>
+        {cartCount > 0 && (
+           <span className="absolute top-1 right-2 w-4 h-4 bg-brand-red text-white text-[9px] font-bold flex items-center justify-center rounded-full border border-white">
+             {cartCount}
+           </span>
+        )}
+      </button>
+      <button className={`flex flex-col items-center gap-1 p-1 sm:p-2 ${activeTab === 'profile' ? 'text-brand-red' : 'text-brand-dark/40 hover:text-brand-dark'}`} onClick={() => onNavigate('profile')}>
+        <User size={24} className={activeTab === 'profile' ? 'fill-brand-red/20' : ''} />
+        <span className="text-[10px] font-bold">Perfil</span>
+      </button>
+    </div>
+  );
+}
+
+function ProfileScreen({ cartCount, initialSubView = 'main', onBack, onCart, onHome, onCoupons, onProfile, onSupport }: any) {
+  const [subView, setSubView] = useState<'main' | 'orders' | 'coupons' | 'payments' | 'fidelity'>(initialSubView);
+  const currentSpent = 650;
+  const goal = 900;
+  const progressPercent = Math.min((currentSpent / goal) * 100, 100);
+
+  if (subView !== 'main') {
+    return (
+      <motion.div
+        key={subView}
+        initial={{ opacity: 0, x: 50 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: 50 }}
+        className="min-h-screen bg-brand-cream pb-32 flex flex-col pt-6 px-6"
+      >
+        <div className="flex items-center mb-8 mt-4 relative">
+          <button onClick={() => setSubView('main')} className="absolute left-0 p-2 -ml-2 rounded-full hover:bg-brand-gold/20 transition">
+            <ArrowLeft size={28} className="text-brand-dark" />
+          </button>
+          <h2 className="font-display text-2xl mx-auto w-full text-center mt-1">
+            {subView === 'orders' && 'Meus Pedidos'}
+            {subView === 'coupons' && 'Cupons e Vantagens'}
+            {subView === 'payments' && 'Meus Cartões'}
+            {subView === 'fidelity' && 'Fidelidade'}
+          </h2>
+        </div>
+        
+        {subView === 'orders' && (
+           <div className="space-y-4">
+             <div className="bg-white p-5 rounded-2xl shadow-sm border border-brand-gold/20 flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-brand-dark text-lg">Pedido #482</div>
+                  <div className="text-sm text-brand-dark/60 mt-1">12 Mai 2026 • R$ 149,90</div>
+                </div>
+                <div className="bg-green-100 text-green-700 font-bold text-[10px] px-3 py-1.5 rounded-md tracking-wider uppercase">Entregue</div>
+             </div>
+             <div className="bg-white p-5 rounded-2xl shadow-sm border border-brand-gold/20 flex items-center justify-between opacity-70">
+                <div>
+                  <div className="font-bold text-brand-dark text-lg">Pedido #310</div>
+                  <div className="text-sm text-brand-dark/60 mt-1">05 Mai 2026 • R$ 220,00</div>
+                </div>
+                <div className="bg-green-100 text-green-700 font-bold text-[10px] px-3 py-1.5 rounded-md tracking-wider uppercase">Entregue</div>
+             </div>
+           </div>
+        )}
+
+        {subView === 'coupons' && (
+           <div className="space-y-4">
+             <div className="bg-brand-red text-white p-6 rounded-3xl shadow-sm relative overflow-hidden">
+                <div className="absolute -top-4 -right-4 p-4 opacity-[0.15]">
+                   <Ticket size={120} />
+                </div>
+                <div className="relative z-10 flex flex-col items-start">
+                   <div className="font-display text-3xl mb-1 tracking-wider">PRIMEIRA10</div>
+                   <div className="text-sm text-white/90 mb-6">10% de desconto no seu primeiro pedido do app.</div>
+                   <button className="bg-white text-brand-red text-xs font-bold px-5 py-2.5 rounded-full uppercase tracking-widest shadow-md active:scale-95 transition-transform">Copiar Código</button>
+                </div>
+             </div>
+           </div>
+        )}
+
+        {subView === 'payments' && (
+           <div className="space-y-4">
+             <div className="bg-white p-5 rounded-2xl shadow-sm border border-brand-gold/20 flex items-center gap-4">
+                <div className="w-12 h-12 bg-brand-cream rounded-xl flex items-center justify-center">
+                   <CreditCard className="text-brand-dark/50" size={24} />
+                </div>
+                <div className="flex-1">
+                  <div className="font-bold text-brand-dark">Cartão **** 1234</div>
+                  <div className="text-xs text-brand-dark/50 mt-0.5">Vencimento 12/28</div>
+                </div>
+                <button className="text-brand-red/50 hover:text-brand-red p-2"><Minus size={20} /></button>
+             </div>
+             <button className="w-full py-5 border-2 border-dashed border-brand-gold/40 rounded-2xl text-brand-dark/60 font-bold flex flex-col justify-center items-center gap-2 hover:bg-brand-gold/10 transition active:bg-brand-gold/20">
+               <Plus size={24} className="text-brand-gold" />
+               Adicionar Cartão
+             </button>
+           </div>
+        )}
+
+        {subView === 'fidelity' && (
+           <div className="space-y-6">
+             <div className="bg-white p-8 rounded-3xl shadow-sm border border-brand-gold/20 flex flex-col items-center text-center">
+                 <div className="w-20 h-20 bg-brand-cream rounded-full flex items-center justify-center mb-6">
+                    <Flame className="text-brand-red" size={40} />
+                 </div>
+                 <h3 className="font-display text-3xl text-brand-dark mb-3">Quase lá!</h3>
+                 <p className="text-brand-dark/70 text-base mb-8 max-w-[250px]">Você acumulou <strong>R$ {currentSpent}</strong>. Faltam apenas <strong>R$ {goal - currentSpent}</strong> para resgatar sua porção grátis!</p>
+                 
+                 <div className="w-full bg-brand-cream/50 p-5 rounded-2xl text-left border border-brand-gold/10">
+                   <h4 className="font-bold text-sm mb-3 text-brand-dark uppercase tracking-wider">Como Funciona</h4>
+                   <ul className="text-sm text-brand-dark/70 space-y-3 list-disc list-inside">
+                     <li>Todas as compras no app são válidas.</li>
+                     <li>Ao atingir a meta, um cupom será emitido.</li>
+                     <li>Válido para 1 Porção de Linguiça Artesanal ou Farofa.</li>
+                   </ul>
+                 </div>
+             </div>
+           </div>
+        )}
+
+        <BottomNav activeTab={subView === 'coupons' ? 'coupons' : 'profile'} cartCount={cartCount} onNavigate={(tab) => {
+          if (tab === 'home') onHome();
+          if (tab === 'cart') onCart();
+          if (tab === 'coupons') {
+            setSubView('coupons');
+            if(onCoupons) onCoupons();
+          }
+          if (tab === 'profile') {
+            setSubView('main');
+            if(onProfile) onProfile();
+          }
+           if (tab === 'support') {
+            if(onSupport) onSupport();
+          }
+        }} />
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      key="profile"
+      variants={pageVariants}
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      className="min-h-screen bg-brand-cream pb-32 flex flex-col pt-6 px-6"
+    >
+      <div className="flex items-center justify-between mb-8 mt-4">
+        <div>
+          <h2 className="font-display text-4xl text-brand-dark">Perfil</h2>
+          <p className="text-brand-dark/70 text-sm font-medium">Sua conta e fidelidade</p>
+        </div>
+        <div className="w-16 h-16 bg-brand-red rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-md">
+          JD
+        </div>
+      </div>
+
+      <button onClick={() => setSubView('fidelity')} className="bg-white p-6 rounded-3xl shadow-sm border border-brand-gold/20 mb-6 relative overflow-hidden text-left hover:scale-[1.02] active:scale-[0.98] transition-transform w-full">
+        <div className="absolute top-0 right-0 p-4 opacity-[0.03]">
+           <Flame size={120} />
+        </div>
+        <div className="flex items-center gap-3 mb-4 relative z-10">
+          <Flame className="text-brand-red" size={28} />
+          <h3 className="font-display text-2xl text-brand-dark">Fidelidade Na Brasa</h3>
+        </div>
+        
+        <p className="text-sm text-brand-dark/70 mb-4 leading-relaxed relative z-10">
+          Acumule <strong>R$ {goal}</strong> em compras no App e ganhe 1 porção de Linguiça ou Farofa por nossa conta!
+        </p>
+
+        <div className="relative pt-8 pb-2 z-10">
+          <div className="w-full h-3 bg-brand-cream rounded-full overflow-hidden border border-brand-gold/10 relative">
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPercent}%` }}
+              transition={{ duration: 1.5, type: 'spring' }}
+              className="h-full bg-brand-red rounded-full absolute left-0 top-0"
+            />
+          </div>
+          
+          <div 
+            className="absolute top-0 transition-all duration-1000 flex flex-col items-center"
+            style={{ left: `calc(${progressPercent}% - 30px)` }}
+          >
+             <div className="bg-brand-dark text-brand-gold text-[10px] font-bold px-2 py-1 rounded w-max shadow-sm">
+               R$ {currentSpent}
+             </div>
+             <div className="w-2 h-2 bg-brand-dark transform rotate-45 -mt-1 shadow-sm"></div>
+          </div>
+
+          <div className="flex justify-between text-xs mt-2 font-bold text-brand-dark/60">
+             <span>R$ 0</span>
+             <span>R$ {goal}</span>
+          </div>
+        </div>
+      </button>
+
+      <div className="space-y-3">
+         <button onClick={() => setSubView('orders')} className="w-full bg-white p-5 rounded-2xl border border-brand-gold/20 flex items-center justify-between font-bold text-brand-dark shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
+            <div className="flex items-center gap-3">
+               <ReceiptText size={20} className="text-brand-dark/50" />
+               Meus Pedidos
+            </div>
+            <ChevronRight size={18} className="text-brand-dark/30" />
+         </button>
+         <button onClick={() => setSubView('coupons')} className="w-full bg-white p-5 rounded-2xl border border-brand-gold/20 flex items-center justify-between font-bold text-brand-dark shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
+            <div className="flex items-center gap-3">
+               <Gift size={20} className="text-brand-dark/50" />
+               Cupons e Vantagens
+            </div>
+            <ChevronRight size={18} className="text-brand-dark/30" />
+         </button>
+         <button onClick={() => setSubView('payments')} className="w-full bg-white p-5 rounded-2xl border border-brand-gold/20 flex items-center justify-between font-bold text-brand-dark shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
+            <div className="flex items-center gap-3">
+               <CreditCard size={20} className="text-brand-dark/50" />
+               Formas de Pagamento
+            </div>
+            <ChevronRight size={18} className="text-brand-dark/30" />
+         </button>
+      </div>
+
+      <button className="mt-8 text-brand-red font-bold flex items-center justify-center gap-2 w-full pb-4 hover:underline">
+        <LogOut size={16} />
+        Sair da Conta
+      </button>
+
+      <BottomNav activeTab={subView === 'coupons' ? 'coupons' : 'profile'} cartCount={cartCount} onNavigate={(tab) => {
+        if (tab === 'home') onHome();
+        if (tab === 'cart') onCart();
+        if (tab === 'coupons') {
+          setSubView('coupons');
+          if(onCoupons) onCoupons();
+        }
+        if (tab === 'profile') {
+          setSubView('main');
+          if(onProfile) onProfile();
+        }
+         if (tab === 'support') {
+          if(onSupport) onSupport();
+        }
+      }} />
+    </motion.div>
+  );
+}
+
+function SupportScreen({ cartCount, onNavigate, onBack }: any) {
+  const [messages, setMessages] = useState([
+    { id: 1, text: 'Olá! Como podemos ajudar o seu churras hoje?', sender: 'restaurante', time: '10:00' }
+  ]);
+  const [input, setInput] = useState('');
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    
+    const newMsg = { id: Date.now(), text: input, sender: 'user', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    setMessages(prev => [...prev, newMsg]);
+    setInput('');
+    
+    // Simulate reply
+    setTimeout(() => {
+      setMessages(prev => [...prev, { id: Date.now() + 1, text: 'Nossa equipe já vai te responder, aguarde um minutinho!', sender: 'restaurante', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+    }, 1500);
+  };
+
+  return (
+    <motion.div
+      key="support"
+      variants={pageVariants}
+      initial={{ opacity: 0, x: 50 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 50 }}
+      className="min-h-screen bg-brand-cream pb-24 flex flex-col pt-6 px-6 relative"
+    >
+      <div className="flex items-center mb-6 mt-4 relative pb-4 border-b border-brand-gold/20">
+        <button onClick={onBack} className="absolute left-0 p-2 -ml-2 rounded-full hover:bg-brand-gold/20 transition">
+          <ArrowLeft size={28} className="text-brand-dark" />
+        </button>
+        <div className="mx-auto flex items-center gap-3">
+          <div className="w-10 h-10 bg-[#25D366]/20 rounded-full flex items-center justify-center">
+            <MessageCircle size={20} className="text-[#25D366]" fill="currentColor" />
+          </div>
+          <div>
+            <h2 className="font-display text-xl text-brand-dark leading-none">Suporte Praça</h2>
+            <span className="text-[10px] text-[#25D366] font-bold uppercase tracking-wider">Online</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto mb-4 hide-scrollbar flex flex-col gap-4 pb-20">
+         {messages.map(msg => (
+           <div key={msg.id} className={`flex flex-col max-w-[80%] ${msg.sender === 'user' ? 'self-end items-end' : 'self-start items-start'}`}>
+             <div className={`p-4 rounded-2xl ${msg.sender === 'user' ? 'bg-brand-red text-white rounded-br-none' : 'bg-white border border-brand-gold/20 text-brand-dark rounded-bl-none shadow-sm'}`}>
+               <p className="text-sm">{msg.text}</p>
+             </div>
+             <span className="text-[10px] text-brand-dark/40 mt-1">{msg.time}</span>
+           </div>
+         ))}
+      </div>
+
+      <div className="fixed bottom-[80px] left-0 right-0 px-6 z-40">
+        <form onSubmit={handleSend} className="max-w-md mx-auto relative">
+          <input 
+            type="text" 
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            placeholder="Digite sua mensagem..." 
+            className="w-full bg-white border border-brand-gold/30 rounded-full py-4 pl-6 pr-14 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:outline-none focus:ring-2 focus:ring-[#25D366]/50 shadow-sm"
+          />
+          <button type="submit" disabled={!input.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 bg-[#25D366] text-white w-10 h-10 rounded-full flex items-center justify-center shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="translate-x-[-1px] translate-y-[1px]"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
+        </form>
+      </div>
+
+      <BottomNav activeTab="support" cartCount={cartCount} onNavigate={onNavigate} />
+    </motion.div>
+  );
+}
+
