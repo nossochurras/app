@@ -214,10 +214,12 @@ export default function App() {
   React.useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) setView('location')
+      else setView('auth')
     })
   
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) setView('location')
+      else setView('auth')
     })
   
     return () => subscription.unsubscribe()
@@ -1203,7 +1205,13 @@ function ProfileScreen({ cartCount, initialSubView = 'main', onBack, onCart, onH
          </button>
       </div>
 
-      <button className="mt-8 text-brand-red font-bold flex items-center justify-center gap-2 w-full pb-4 hover:underline">
+      <button 
+        onClick={async () => {
+          await supabase.auth.signOut()
+          onHome()
+        }} 
+        className="mt-8 text-brand-red font-bold flex items-center justify-center gap-2 w-full pb-4 hover:underline"
+      >
         <LogOut size={16} />
         Sair da Conta
       </button>
