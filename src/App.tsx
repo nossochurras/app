@@ -1,3 +1,4 @@
+import { supabase } from './supabaseClient'
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -210,15 +211,33 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAllLocations, setShowAllLocations] = useState(false);
 
-  const handleLoginClick = () => {
-    setLoginAnim(true);
-    setTimeout(() => {
-      setView('location');
-      setTimeout(() => {
-        setLoginAnim(false);
-      }, 100);
-    }, 900);
-  };
+  React.useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setView('location')
+    })
+  
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) setView('location')
+    })
+  
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleLoginClick = async (provider: 'google' | 'apple') => {
+    await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin }
+    })
+  }
+
+  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const form = e.currentTarget
+    const email = (form.elements.namedItem('email') as HTMLInputElement).value
+    const password = (form.elements.namedItem('password') as HTMLInputElement).value
+    const { error } = await supabase.auth.signUp({ email, password })
+    if (!error) setView('welcome')
+  }  
 
   const handleAddToCart = (item: Item) => {
     setCart(prev => {
@@ -286,11 +305,11 @@ export default function App() {
 
               <div className="space-y-4 w-full max-w-sm mx-auto">
                 <div className="flex flex-col gap-3">
-                  <button onClick={handleLoginClick} className="w-full bg-white border border-brand-gold/20 text-brand-dark p-4 rounded-2xl flex items-center justify-center gap-3 font-semibold shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
+                  <button onClick={() => handleLoginClick('google')} className="w-full bg-white border border-brand-gold/20 text-brand-dark p-4 rounded-2xl flex items-center justify-center gap-3 font-semibold shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
                     <GoogleIcon />
                     Continuar com Google
                   </button>
-                  <button onClick={handleLoginClick} className="w-full bg-black text-white p-4 rounded-2xl flex items-center justify-center gap-3 font-semibold shadow-sm hover:bg-gray-900 transition active:scale-[0.98]">
+                  <button onClick={() => handleLoginClick('apple')} className="w-full bg-black text-white p-4 rounded-2xl flex items-center justify-center gap-3 font-semibold shadow-sm hover:bg-gray-900 transition active:scale-[0.98]">
                     <AppleIcon />
                     Continuar com Apple
                   </button>
@@ -333,7 +352,7 @@ export default function App() {
                 <p className="text-brand-dark/70">Preencha seus dados para entrar na roda.</p>
               </div>
 
-              <form onSubmit={(e) => { e.preventDefault(); setView('welcome'); }} className="space-y-4">
+              <form onSubmit={handleRegister} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-brand-dark/70 uppercase tracking-wider mb-1.5 ml-1">Nome Completo</label>
                   <input type="text" required placeholder="João da Silva" className="w-full bg-white border border-brand-gold/30 rounded-2xl p-4 text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:ring-2 focus:ring-brand-red/50 shadow-sm transition" />
@@ -344,7 +363,11 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-brand-dark/70 uppercase tracking-wider mb-1.5 ml-1">E-mail</label>
-                  <input type="email" required placeholder="joao@exemplo.com" className="w-full bg-white border border-brand-gold/30 rounded-2xl p-4 text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:ring-2 focus:ring-brand-red/50 shadow-sm transition" />
+                  <input name="email" type="email" required placeholder="joao@exemplo.com" className="w-full bg-white border border-brand-gold/30 rounded-2xl p-4 text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:ring-2 focus:ring-brand-red/50 shadow-sm transition" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-brand-dark/70 uppercase tracking-wider mb-1.5 ml-1">Senha</label>
+                  <input name="password" type="password" required placeholder="Mínimo 6 caracteres" className="w-full bg-white border border-brand-gold/30 rounded-2xl p-4 text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:ring-2 focus:ring-brand-red/50 shadow-sm transition" />
                 </div>
 
                 <div className="pt-4">
