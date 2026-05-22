@@ -203,7 +203,7 @@ const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<'auth' | 'register' | 'welcome' | 'location' | 'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support'>('auth');
+  const [view, setView] = useState<'auth' | 'register' | 'confirm-email' | 'welcome' | 'location' | 'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support'>('auth');
   const [location, setLocation] = useState<string>('');
   const [cart, setCart] = useState<{item: Item, quantity: number}[]>([]);
   const [orderCode, setOrderCode] = useState<string>('');
@@ -236,11 +236,12 @@ export default function App() {
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const form = e.currentTarget
+    const name = (form.elements.namedItem('name') as HTMLInputElement).value
     const email = (form.elements.namedItem('email') as HTMLInputElement).value
     const password = (form.elements.namedItem('password') as HTMLInputElement).value
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (!error) setView('welcome')
-  }  
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } })
+    if (!error) setView('confirm-email')
+  }
 
   const handleAddToCart = (item: Item) => {
     setCart(prev => {
@@ -358,7 +359,7 @@ export default function App() {
               <form onSubmit={handleRegister} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-brand-dark/70 uppercase tracking-wider mb-1.5 ml-1">Nome Completo</label>
-                  <input type="text" required placeholder="João da Silva" className="w-full bg-white border border-brand-gold/30 rounded-2xl p-4 text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:ring-2 focus:ring-brand-red/50 shadow-sm transition" />
+                  <input name="name" type="text" required placeholder="João da Silva" className="w-full bg-white border border-brand-gold/30 rounded-2xl p-4 text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:ring-2 focus:ring-brand-red/50 shadow-sm transition" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-brand-dark/70 uppercase tracking-wider mb-1.5 ml-1">Telefone</label>
@@ -379,6 +380,62 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </div>
+          </motion.div>
+        )}
+
+        {/* CONFIRM EMAIL SCREEN */}
+        {view === 'confirm-email' && (
+          <motion.div
+            key="confirm-email"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="min-h-screen bg-brand-cream flex flex-col items-center justify-center p-6 text-center relative z-10"
+          >
+            <div className="relative z-10 flex flex-col items-center w-full max-w-sm mx-auto">
+              <div className="w-24 h-24 bg-brand-red rounded-full flex items-center justify-center mb-8 shadow-lg">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2"/>
+                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                </svg>
+              </div>
+
+              <h2 className="font-display text-4xl text-brand-dark mb-3">Confirme seu E-mail</h2>
+              <p className="text-brand-dark/70 text-base mb-10 leading-relaxed">
+                Enviamos um link de confirmação para o seu e-mail. Acesse sua caixa de entrada e clique no link para ativar sua conta.
+              </p>
+
+              <div className="w-full bg-white border border-brand-gold/20 rounded-3xl p-6 mb-8 shadow-sm text-left space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-brand-red/10 rounded-full flex items-center justify-center mt-0.5 shrink-0">
+                    <span className="text-brand-red font-bold text-xs">1</span>
+                  </div>
+                  <p className="text-sm text-brand-dark/80">Abra o e-mail que enviamos para você</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-brand-red/10 rounded-full flex items-center justify-center mt-0.5 shrink-0">
+                    <span className="text-brand-red font-bold text-xs">2</span>
+                  </div>
+                  <p className="text-sm text-brand-dark/80">Clique no botão <strong>"Confirmar E-mail"</strong></p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-brand-red/10 rounded-full flex items-center justify-center mt-0.5 shrink-0">
+                    <span className="text-brand-red font-bold text-xs">3</span>
+                  </div>
+                  <p className="text-sm text-brand-dark/80">Volte ao app e faça seu login</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setView('auth')}
+                className="w-full bg-brand-red text-white p-4 rounded-2xl font-bold tracking-wide flex items-center justify-center shadow-lg hover:bg-red-700 transition active:scale-[0.98]"
+              >
+                Ir para o Login
+              </button>
+
+              <p className="text-xs text-brand-dark/40 mt-6">Não recebeu o e-mail? Verifique sua pasta de spam.</p>
             </div>
           </motion.div>
         )}
