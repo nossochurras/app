@@ -210,17 +210,18 @@ export default function App() {
   const [loginAnim, setLoginAnim] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAllLocations, setShowAllLocations] = useState(false);
-
-  React.useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setView('location')
-      else setView('auth')
-    })
+  const [user, setUser] = useState<any>(null);
   
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) setView('location')
-      else setView('auth')
-    })
+  React.useEffect(() => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) { setUser(session.user); setView('location') }
+    else setView('auth')
+  })
+  
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (session) { setUser(session.user); setView('location') }
+    else { setUser(null); setView('auth') }
+  })
   
     return () => subscription.unsubscribe()
   }, [])
@@ -553,6 +554,7 @@ export default function App() {
         {(view === 'profile' || view === 'coupons') && (
           <ProfileScreen 
             key={view}
+            user={user}
             cartCount={cartCount}
             initialSubView={view === 'coupons' ? 'coupons' : 'main'}
             onBack={() => setView('menu')}
@@ -1002,8 +1004,11 @@ function BottomNav({ activeTab, cartCount, onNavigate }: { activeTab: string, ca
   );
 }
 
-function ProfileScreen({ cartCount, initialSubView = 'main', onBack, onCart, onHome, onCoupons, onProfile, onSupport }: any) {
+function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCart, onHome, onCoupons, onProfile, onSupport }: any) {
   const [subView, setSubView] = useState<'main' | 'orders' | 'coupons' | 'payments' | 'fidelity'>(initialSubView);
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário';
+  const initials = displayName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase();
+  const avatarUrl = user?.user_metadata?.avatar_url;
   const currentSpent = 650;
   const goal = 900;
   const progressPercent = Math.min((currentSpent / goal) * 100, 100);
@@ -1136,9 +1141,13 @@ function ProfileScreen({ cartCount, initialSubView = 'main', onBack, onCart, onH
           <h2 className="font-display text-4xl text-brand-dark">Perfil</h2>
           <p className="text-brand-dark/70 text-sm font-medium">Sua conta e fidelidade</p>
         </div>
-        <div className="w-16 h-16 bg-brand-red rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-md">
-          JD
-        </div>
+        {avatarUrl ? (
+          <img src={avatarUrl} className="w-16 h-16 rounded-full object-cover shadow-md" />
+        ) : (
+          <div className="w-16 h-16 bg-brand-red rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-md">
+            {initials}
+          </div>
+        )}
       </div>
 
       <button onClick={() => setSubView('fidelity')} className="bg-white p-6 rounded-3xl shadow-sm border border-brand-gold/20 mb-6 relative overflow-hidden text-left hover:scale-[1.02] active:scale-[0.98] transition-transform w-full">
