@@ -228,7 +228,7 @@ export default function App() {
   const handleLoginClick = async (provider: 'google' | 'apple') => {
     await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin }
+      options: { redirectTo: 'https://freofigures-nosso-churras.7t6kue.easypanel.host/' }
     })
   }
 
