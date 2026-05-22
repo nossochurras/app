@@ -1208,7 +1208,6 @@ function ProfileScreen({ cartCount, initialSubView = 'main', onBack, onCart, onH
       <button 
         onClick={async () => {
           await supabase.auth.signOut()
-          onHome()
         }} 
         className="mt-8 text-brand-red font-bold flex items-center justify-center gap-2 w-full pb-4 hover:underline"
       >
