@@ -805,6 +805,11 @@ export default function App() {
           </motion.div>
         )}
 
+      </AnimatePresence>
+    </div>
+  );
+}
+
 const CATEGORY_TABS = [
   { id: 'Todos', label: 'Tudo', icon: LayoutGrid, color: 'text-brand-dark' },
   { id: 'Carnes', label: 'Cortes', icon: Beef, color: 'text-brand-red' },
