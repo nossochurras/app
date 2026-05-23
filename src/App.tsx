@@ -661,9 +661,22 @@ export default function App() {
             onBack={() => setView('cart')}
             onFinalize={async (paymentType: 'app' | 'local') => {
               // Gera código do pedido
-              const code = location === 'Retirada no Balcão'
-                ? Math.random().toString(36).substring(2, 8).toUpperCase()
-                : Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+              let code: string;
+              if (location === 'Retirada no Balcão') {
+                code = Math.random().toString(36).substring(2, 8).toUpperCase();
+              } else {
+                const { data: lastOrder } = await supabase
+                  .from('orders')
+                  .select('order_code')
+                  .neq('location', 'Retirada no Balcão')
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+              
+                const lastNumber = lastOrder ? parseInt(lastOrder.order_code, 10) : 0;
+                const nextNumber = (isNaN(lastNumber) ? 0 : lastNumber) + 1;
+                code = nextNumber.toString().padStart(3, '0');
+              }
             
               setOrderCode(code);
             
