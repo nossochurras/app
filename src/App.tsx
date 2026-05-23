@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   MapPin, 
@@ -76,6 +76,17 @@ async function addSpentAndCheckGoal(userId: string, amount: number) {
     .eq('user_id', userId);
 
   return { couponGenerated: false };
+}
+
+async function fetchActiveCoupons(userId: string) {
+  const { data } = await supabase
+    .from('fidelity_coupons')
+    .select('id, code, redeemed, created_at')
+    .eq('user_id', userId)
+    .eq('redeemed', false)
+    .order('created_at', { ascending: false });
+
+  return data ?? [];
 }
 
 type Item = {
