@@ -26,6 +26,58 @@ import {
   LogOut
 } from 'lucide-react';
 
+// ─── FIDELITY HELPERS ───────────────────────────────────────────
+
+const FIDELITY_GOAL = 900;
+
+async function ensureFidelityRecord(userId: string) {
+  const { data } = await supabase
+    .from('fidelity')
+    .select('total_spent')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (data) return data;
+
+  const { data: created } = await supabase
+    .from('fidelity')
+    .insert({ user_id: userId, total_spent: 0 })
+    .select('total_spent')
+    .single();
+
+  return created;
+}
+
+async function addSpentAndCheckGoal(userId: string, amount: number) {
+  const current = await ensureFidelityRecord(userId);
+  if (!current) return { couponGenerated: false };
+
+  const newTotal = current.total_spent + amount;
+
+  if (newTotal >= FIDELITY_GOAL) {
+    const excess = newTotal - FIDELITY_GOAL;
+    const code = 'BRASA-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    await supabase
+      .from('fidelity')
+      .update({ total_spent: excess, updated_at: new Date().toISOString() })
+      .eq('user_id', userId);
+
+    await supabase
+      .from('fidelity_coupons')
+      .insert({ user_id: userId, code, redeemed: false });
+
+    return { couponGenerated: true, couponCode: code };
+  }
+
+  await supabase
+    .from('fidelity')
+    .update({ total_spent: newTotal, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
+
+  return { couponGenerated: false };
+}
+
 type Item = {
   id: number;
   name: string;
@@ -207,6 +259,7 @@ export default function App() {
   const [location, setLocation] = useState<string>('');
   const [cart, setCart] = useState<{item: Item, quantity: number}[]>([]);
   const [orderCode, setOrderCode] = useState<string>('');
+  const [fidelityNewCoupon, setFidelityNewCoupon] = useState<string | null>(null);
   const [loginAnim, setLoginAnim] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAllLocations, setShowAllLocations] = useState(false);
@@ -595,13 +648,21 @@ export default function App() {
             location={location}
             cartTotal={cartTotal}
             onBack={() => setView('cart')}
-            onFinalize={() => {
+            onFinalize={async () => {
               if (location === 'Retirada no Balcão') {
-                const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-                setOrderCode(code);
+                setOrderCode(Math.random().toString(36).substring(2, 8).toUpperCase());
               } else {
-                setOrderCode(Math.floor(Math.random()*1000).toString().padStart(3, '0'));
+                setOrderCode(Math.floor(Math.random() * 1000).toString().padStart(3, '0'));
               }
+            
+              // [FIDELITY] Registra gasto e verifica meta
+              if (user?.id) {
+                const result = await addSpentAndCheckGoal(user.id, cartTotal);
+                if (result.couponGenerated && result.couponCode) {
+                  setFidelityNewCoupon(result.couponCode);
+                }
+              }
+            
               setView('success');
             }}
           />
@@ -647,18 +708,22 @@ export default function App() {
             exit="exit"
             className="min-h-screen bg-brand-red text-white flex flex-col items-center justify-center p-6 text-center"
           >
-            <motion.div 
-               initial={{ scale: 0 }} 
-               animate={{ scale: 1 }} 
-               transition={{ type: 'spring', bounce: 0.5, delay: 0.2 }}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', bounce: 0.5, delay: 0.2 }}
             >
               <ChefHat size={80} className="text-brand-gold mb-6 mx-auto" />
             </motion.div>
             <h1 className="font-display text-5xl mb-4">Pedido na Brasa!</h1>
             <p className="text-brand-cream/90 text-lg mb-8 max-w-sm">
-              Tudo anotado para o seu momento. {location === 'Retirada no Balcão' ? 'Apresente o código abaixo no balcão para retirar.' : 'Aproveite a resenha enquanto levamos seu churrasco.'}
+              Tudo anotado para o seu momento.{' '}
+              {location === 'Retirada no Balcão'
+                ? 'Apresente o código abaixo no balcão para retirar.'
+                : 'Aproveite a resenha enquanto levamos seu churrasco.'}
             </p>
-            <div className="bg-brand-dark w-full max-w-sm p-8 rounded-3xl mb-8 shadow-2xl relative overflow-hidden">
+        
+            <div className="bg-brand-dark w-full max-w-sm p-8 rounded-3xl mb-6 shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-brand-gold"></div>
               <div className="text-brand-gold text-xs font-bold uppercase tracking-widest mb-2">Seu Local</div>
               <div className="text-xl mb-6">{location}</div>
@@ -674,22 +739,37 @@ export default function App() {
                 </>
               )}
             </div>
-            <button 
+        
+            {/* [FIDELITY] Banner de cupom gerado */}
+            {fidelityNewCoupon && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="w-full max-w-sm bg-brand-gold text-brand-dark p-5 rounded-2xl mb-6 shadow-xl"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Gift size={20} className="text-brand-dark" />
+                  <span className="font-bold text-sm uppercase tracking-wider">Meta atingida! Cupom gerado 🎉</span>
+                </div>
+                <div className="font-display text-2xl tracking-widest">{fidelityNewCoupon}</div>
+                <p className="text-xs mt-1 text-brand-dark/70">Use na sua próxima visita • válido em Cupons no app</p>
+              </motion.div>
+            )}
+        
+            <button
               onClick={() => {
                 setCart([]);
                 setOrderCode('');
+                setFidelityNewCoupon(null);
                 setView('welcome');
-              }} 
+              }}
               className="bg-brand-cream text-brand-red font-bold text-lg py-4 px-10 rounded-full hover:scale-105 transition shadow-xl"
             >
               Voltar ao Início
             </button>
           </motion.div>
         )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 const CATEGORY_TABS = [
   { id: 'Todos', label: 'Tudo', icon: LayoutGrid, color: 'text-brand-dark' },
@@ -1066,9 +1146,6 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário';
   const initials = displayName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase();
   const avatarUrl = user?.user_metadata?.avatar_url;
-  const currentSpent = 650;
-  const goal = 900;
-  const progressPercent = Math.min((currentSpent / goal) * 100, 100);
 
   if (subView !== 'main') {
     return (
@@ -1111,18 +1188,7 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
         )}
 
         {subView === 'coupons' && (
-           <div className="space-y-4">
-             <div className="bg-brand-red text-white p-6 rounded-3xl shadow-sm relative overflow-hidden">
-                <div className="absolute -top-4 -right-4 p-4 opacity-[0.15]">
-                   <Ticket size={120} />
-                </div>
-                <div className="relative z-10 flex flex-col items-start">
-                   <div className="font-display text-3xl mb-1 tracking-wider">PRIMEIRA10</div>
-                   <div className="text-sm text-white/90 mb-6">10% de desconto no seu primeiro pedido do app.</div>
-                   <button className="bg-white text-brand-red text-xs font-bold px-5 py-2.5 rounded-full uppercase tracking-widest shadow-md active:scale-95 transition-transform">Copiar Código</button>
-                </div>
-             </div>
-           </div>
+          <CouponsSubView userId={user?.id} />
         )}
 
         {subView === 'payments' && (
@@ -1145,24 +1211,7 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
         )}
 
         {subView === 'fidelity' && (
-           <div className="space-y-6">
-             <div className="bg-white p-8 rounded-3xl shadow-sm border border-brand-gold/20 flex flex-col items-center text-center">
-                 <div className="w-20 h-20 bg-brand-cream rounded-full flex items-center justify-center mb-6">
-                    <Flame className="text-brand-red" size={40} />
-                 </div>
-                 <h3 className="font-display text-3xl text-brand-dark mb-3">Quase lá!</h3>
-                 <p className="text-brand-dark/70 text-base mb-8 max-w-[250px]">Você acumulou <strong>R$ {currentSpent}</strong>. Faltam apenas <strong>R$ {goal - currentSpent}</strong> para resgatar sua porção grátis!</p>
-                 
-                 <div className="w-full bg-brand-cream/50 p-5 rounded-2xl text-left border border-brand-gold/10">
-                   <h4 className="font-bold text-sm mb-3 text-brand-dark uppercase tracking-wider">Como Funciona</h4>
-                   <ul className="text-sm text-brand-dark/70 space-y-3 list-disc list-inside">
-                     <li>Todas as compras no app são válidas.</li>
-                     <li>Ao atingir a meta, um cupom será emitido.</li>
-                     <li>Válido para 1 Porção de Linguiça Artesanal ou Farofa.</li>
-                   </ul>
-                 </div>
-             </div>
-           </div>
+          <FidelitySubView userId={user?.id} />
         )}
 
         <BottomNav activeTab={subView === 'coupons' ? 'coupons' : 'profile'} cartCount={cartCount} onNavigate={(tab) => {
@@ -1207,45 +1256,7 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
         )}
       </div>
 
-      <button onClick={() => setSubView('fidelity')} className="bg-white p-6 rounded-3xl shadow-sm border border-brand-gold/20 mb-6 relative overflow-hidden text-left hover:scale-[1.02] active:scale-[0.98] transition-transform w-full">
-        <div className="absolute top-0 right-0 p-4 opacity-[0.03]">
-           <Flame size={120} />
-        </div>
-        <div className="flex items-center gap-3 mb-4 relative z-10">
-          <Flame className="text-brand-red" size={28} />
-          <h3 className="font-display text-2xl text-brand-dark">Fidelidade Na Brasa</h3>
-        </div>
-        
-        <p className="text-sm text-brand-dark/70 mb-4 leading-relaxed relative z-10">
-          Acumule <strong>R$ {goal}</strong> em compras no App e ganhe 1 porção de Linguiça ou Farofa por nossa conta!
-        </p>
-
-        <div className="relative pt-8 pb-2 z-10">
-          <div className="w-full h-3 bg-brand-cream rounded-full overflow-hidden border border-brand-gold/10 relative">
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${progressPercent}%` }}
-              transition={{ duration: 1.5, type: 'spring' }}
-              className="h-full bg-brand-red rounded-full absolute left-0 top-0"
-            />
-          </div>
-          
-          <div 
-            className="absolute top-0 transition-all duration-1000 flex flex-col items-center"
-            style={{ left: `calc(${progressPercent}% - 30px)` }}
-          >
-             <div className="bg-brand-dark text-brand-gold text-[10px] font-bold px-2 py-1 rounded w-max shadow-sm">
-               R$ {currentSpent}
-             </div>
-             <div className="w-2 h-2 bg-brand-dark transform rotate-45 -mt-1 shadow-sm"></div>
-          </div>
-
-          <div className="flex justify-between text-xs mt-2 font-bold text-brand-dark/60">
-             <span>R$ 0</span>
-             <span>R$ {goal}</span>
-          </div>
-        </div>
-      </button>
+      <FidelityProgressButton onClick={() => setSubView('fidelity')} userId={user?.id} />
 
       <div className="space-y-3">
          <button onClick={() => setSubView('orders')} className="w-full bg-white p-5 rounded-2xl border border-brand-gold/20 flex items-center justify-between font-bold text-brand-dark shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
@@ -1375,3 +1386,167 @@ function SupportScreen({ cartCount, onNavigate, onBack }: any) {
   );
 }
 
+    // ─────────────────────────────────────────────
+// [FIDELITY] COMPONENTE: botão de progresso na tela principal do perfil
+// ─────────────────────────────────────────────
+function FidelityProgressButton({ onClick, userId }: { onClick: () => void; userId?: string }) {
+  const [totalSpent, setTotalSpent] = useState(0);
+
+  useEffect(() => {
+    if (!userId) return;
+    ensureFidelityRecord(userId).then(data => {
+      if (data) setTotalSpent(data.total_spent);
+    });
+  }, [userId]);
+
+  const progressPercent = Math.min((totalSpent / FIDELITY_GOAL) * 100, 100);
+
+  return (
+    <button onClick={onClick} className="bg-white p-6 rounded-3xl shadow-sm border border-brand-gold/20 mb-6 relative overflow-hidden text-left hover:scale-[1.02] active:scale-[0.98] transition-transform w-full">
+      <div className="absolute top-0 right-0 p-4 opacity-[0.03]">
+        <Flame size={120} />
+      </div>
+      <div className="flex items-center gap-3 mb-4 relative z-10">
+        <Flame className="text-brand-red" size={28} />
+        <h3 className="font-display text-2xl text-brand-dark">Fidelidade Na Brasa</h3>
+      </div>
+      <p className="text-sm text-brand-dark/70 mb-4 leading-relaxed relative z-10">
+        Acumule <strong>R$ {FIDELITY_GOAL}</strong> em compras no App e ganhe 1 porção de Linguiça ou Farofa por nossa conta!
+      </p>
+      <div className="relative pt-8 pb-2 z-10">
+        <div className="w-full h-3 bg-brand-cream rounded-full overflow-hidden border border-brand-gold/10 relative">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${progressPercent}%` }}
+            transition={{ duration: 1.5, type: 'spring' }}
+            className="h-full bg-brand-red rounded-full absolute left-0 top-0"
+          />
+        </div>
+        <div
+          className="absolute top-0 transition-all duration-1000 flex flex-col items-center"
+          style={{ left: `calc(${progressPercent}% - 30px)` }}
+        >
+          <div className="bg-brand-dark text-brand-gold text-[10px] font-bold px-2 py-1 rounded w-max shadow-sm">
+            R$ {totalSpent.toFixed(2).replace('.', ',')}
+          </div>
+          <div className="w-2 h-2 bg-brand-dark transform rotate-45 -mt-1 shadow-sm"></div>
+        </div>
+        <div className="flex justify-between text-xs mt-2 font-bold text-brand-dark/60">
+          <span>R$ 0</span>
+          <span>R$ {FIDELITY_GOAL}</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────
+// [FIDELITY] COMPONENTE: subview de fidelidade com dados reais
+// ─────────────────────────────────────────────
+function FidelitySubView({ userId }: { userId?: string }) {
+  const [totalSpent, setTotalSpent] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) { setLoading(false); return; }
+    ensureFidelityRecord(userId).then(data => {
+      if (data) setTotalSpent(data.total_spent);
+      setLoading(false);
+    });
+  }, [userId]);
+
+  const remaining = Math.max(FIDELITY_GOAL - totalSpent, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white p-8 rounded-3xl shadow-sm border border-brand-gold/20 flex flex-col items-center text-center">
+        <div className="w-20 h-20 bg-brand-cream rounded-full flex items-center justify-center mb-6">
+          <Flame className="text-brand-red" size={40} />
+        </div>
+        {loading ? (
+          <p className="text-brand-dark/50">Carregando...</p>
+        ) : remaining === 0 ? (
+          <>
+            <h3 className="font-display text-3xl text-brand-dark mb-3">Meta atingida! 🎉</h3>
+            <p className="text-brand-dark/70 text-base mb-4">
+              Você ganhou um cupom! Confira em <strong>Cupons e Vantagens</strong>.
+            </p>
+          </>
+        ) : (
+          <>
+            <h3 className="font-display text-3xl text-brand-dark mb-3">Quase lá!</h3>
+            <p className="text-brand-dark/70 text-base mb-8 max-w-[250px]">
+              Você acumulou <strong>R$ {totalSpent.toFixed(2).replace('.', ',')}</strong>. Faltam apenas{' '}
+              <strong>R$ {remaining.toFixed(2).replace('.', ',')}</strong> para resgatar sua porção grátis!
+            </p>
+          </>
+        )}
+        <div className="w-full bg-brand-cream/50 p-5 rounded-2xl text-left border border-brand-gold/10">
+          <h4 className="font-bold text-sm mb-3 text-brand-dark uppercase tracking-wider">Como Funciona</h4>
+          <ul className="text-sm text-brand-dark/70 space-y-3 list-disc list-inside">
+            <li>Todas as compras no app são válidas.</li>
+            <li>Ao atingir R$ {FIDELITY_GOAL}, um cupom é gerado automaticamente.</li>
+            <li>Válido para 1 Porção de Linguiça Artesanal ou Farofa.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// [FIDELITY] COMPONENTE: subview de cupons com dados reais
+// ─────────────────────────────────────────────
+function CouponsSubView({ userId }: { userId?: string }) {
+  const [coupons, setCoupons] = useState<{ id: string; code: string; redeemed: boolean; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!userId) { setLoading(false); return; }
+    fetchActiveCoupons(userId).then(data => {
+      setCoupons(data);
+      setLoading(false);
+    });
+  }, [userId]);
+
+  const handleCopy = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopied(code);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  if (loading) return <p className="text-center text-brand-dark/50 mt-8">Carregando...</p>;
+
+  if (coupons.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-brand-dark/40">
+        <Ticket size={48} className="mb-4 opacity-40" />
+        <p className="font-bold text-lg">Nenhum cupom disponível</p>
+        <p className="text-sm mt-1 text-center max-w-[220px]">Continue pedindo para acumular e ganhar cupons!</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {coupons.map(coupon => (
+        <div key={coupon.id} className="bg-brand-red text-white p-6 rounded-3xl shadow-sm relative overflow-hidden">
+          <div className="absolute -top-4 -right-4 p-4 opacity-[0.15]">
+            <Ticket size={120} />
+          </div>
+          <div className="relative z-10 flex flex-col items-start">
+            <div className="font-display text-3xl mb-1 tracking-wider">{coupon.code}</div>
+            <div className="text-sm text-white/80 mb-4">1 Porção grátis (Linguiça ou Farofa)</div>
+            <button
+              onClick={() => handleCopy(coupon.code)}
+              className="bg-white text-brand-red text-xs font-bold px-5 py-2.5 rounded-full uppercase tracking-widest shadow-md active:scale-95 transition-transform"
+            >
+              {copied === coupon.code ? '✓ Copiado!' : 'Copiar Código'}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
