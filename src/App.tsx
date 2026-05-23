@@ -1203,22 +1203,7 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
         </div>
         
         {subView === 'orders' && (
-           <div className="space-y-4">
-             <div className="bg-white p-5 rounded-2xl shadow-sm border border-brand-gold/20 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-brand-dark text-lg">Pedido #482</div>
-                  <div className="text-sm text-brand-dark/60 mt-1">12 Mai 2026 • R$ 149,90</div>
-                </div>
-                <div className="bg-green-100 text-green-700 font-bold text-[10px] px-3 py-1.5 rounded-md tracking-wider uppercase">Entregue</div>
-             </div>
-             <div className="bg-white p-5 rounded-2xl shadow-sm border border-brand-gold/20 flex items-center justify-between opacity-70">
-                <div>
-                  <div className="font-bold text-brand-dark text-lg">Pedido #310</div>
-                  <div className="text-sm text-brand-dark/60 mt-1">05 Mai 2026 • R$ 220,00</div>
-                </div>
-                <div className="bg-green-100 text-green-700 font-bold text-[10px] px-3 py-1.5 rounded-md tracking-wider uppercase">Entregue</div>
-             </div>
-           </div>
+          <OrdersSubView userId={user?.id} />
         )}
 
         {subView === 'coupons' && (
@@ -1528,6 +1513,74 @@ function FidelitySubView({ userId }: { userId?: string }) {
   );
 }
 
+function OrdersSubView({ userId }: { userId?: string }) {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) { setLoading(false); return; }
+    supabase
+      .from('orders')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!error && data) setOrders(data);
+        setLoading(false);
+      });
+  }, [userId]);
+
+  if (loading) return <p className="text-center text-brand-dark/50 mt-8">Carregando...</p>;
+
+  if (orders.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-brand-dark/40">
+        <ReceiptText size={48} className="mb-4 opacity-40" />
+        <p className="font-bold text-lg">Nenhum pedido ainda</p>
+        <p className="text-sm mt-1 text-center max-w-[220px]">Seus pedidos vão aparecer aqui!</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {orders.map(order => {
+        const date = new Date(order.created_at).toLocaleDateString('pt-BR', {
+          day: '2-digit', month: 'short', year: 'numeric'
+        });
+        const isRetirada = order.location === 'Retirada no Balcão';
+        return (
+          <div key={order.id} className="bg-white p-5 rounded-2xl shadow-sm border border-brand-gold/20">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="font-bold text-brand-dark text-lg">
+                  {isRetirada ? `Código: ${order.order_code}` : `Pedido #${order.order_code}`}
+                </div>
+                <div className="text-sm text-brand-dark/60 mt-0.5">{date}</div>
+              </div>
+              <div className="bg-yellow-100 text-yellow-700 font-bold text-[10px] px-3 py-1.5 rounded-md tracking-wider uppercase">
+                {order.status === 'pending' ? 'Em andamento' : order.status}
+              </div>
+            </div>
+            <div className="text-xs text-brand-dark/50 mb-1 flex items-center gap-1">
+              <MapPin size={11} /> {order.location}
+            </div>
+            <div className="border-t border-brand-gold/10 pt-3 mt-3 flex justify-between items-center">
+              <span className="text-xs text-brand-dark/50">
+                {(order.items as any[]).length} {(order.items as any[]).length === 1 ? 'item' : 'itens'} •{' '}
+                {order.payment_type === 'app' ? 'Pago pelo App' : 'Pagar no Local'}
+              </span>
+              <span className="font-display text-brand-red text-lg">
+                R$ {Number(order.total).toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+    
 // ─────────────────────────────────────────────
 // [FIDELITY] COMPONENTE: subview de cupons com dados reais
 // ─────────────────────────────────────────────
