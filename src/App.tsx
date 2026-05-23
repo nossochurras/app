@@ -659,15 +659,38 @@ export default function App() {
             location={location}
             cartTotal={cartTotal}
             onBack={() => setView('cart')}
-            onFinalize={async () => {
-              if (location === 'Retirada no Balcão') {
-                setOrderCode(Math.random().toString(36).substring(2, 8).toUpperCase());
-              } else {
-                setOrderCode(Math.floor(Math.random() * 1000).toString().padStart(3, '0'));
-              }
+            onFinalize={async (paymentType: 'app' | 'local') => {
+              // Gera código do pedido
+              const code = location === 'Retirada no Balcão'
+                ? Math.random().toString(36).substring(2, 8).toUpperCase()
+                : Math.floor(Math.random() * 1000).toString().padStart(3, '0');
             
-              // [FIDELITY] Registra gasto e verifica meta
+              setOrderCode(code);
+            
+              // Salva pedido no Supabase
               if (user?.id) {
+                const { error } = await supabase
+                  .from('orders')
+                  .insert({
+                    user_id: user.id,
+                    location: location,
+                    items: cart.map(c => ({
+                      id: c.item.id,
+                      name: c.item.name,
+                      price: c.item.price,
+                      quantity: c.quantity,
+                    })),
+                    total: cartTotal,
+                    payment_type: paymentType,
+                    order_code: code,
+                    status: 'pending',
+                  });
+            
+                if (error) {
+                  console.error('Erro ao salvar pedido:', error.message);
+                }
+            
+                // [FIDELITY] Registra gasto e verifica meta
                 const result = await addSpentAndCheckGoal(user.id, cartTotal);
                 if (result.couponGenerated && result.couponCode) {
                   setFidelityNewCoupon(result.couponCode);
@@ -1109,11 +1132,11 @@ function CheckoutScreen({ location, cartTotal, onBack, onFinalize }) {
        <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-brand-cream via-brand-cream to-transparent z-50">
          <div className="max-w-md mx-auto">
            <button 
-             onClick={onFinalize}
-             className="w-full bg-brand-red text-white p-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-xl shadow-2xl hover:bg-red-700 transition hover:-translate-y-1 font-display tracking-widest uppercase"
-           >
-             Finalizar Pedido
-           </button>
+              onClick={() => onFinalize(paymentType)}
+              className="w-full bg-brand-red text-white p-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-xl shadow-2xl hover:bg-red-700 transition hover:-translate-y-1 font-display tracking-widest uppercase"
+            >
+              Finalizar Pedido
+            </button>
          </div>
        </div>
     </motion.div>
