@@ -308,29 +308,64 @@ export default function App() {
   React.useEffect(() => {
     if (isAdminRoute) return; // ignora listener de auth para rota admin
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) { setUser(session.user); setView('location'); }
-      else setView('auth');
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
         setUser(session.user);
-        const { data } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-        if (data?.role === 'admin') {
+    
+        let role = null;
+        for (let i = 0; i < 5; i++) {
+          await new Promise(res => setTimeout(res, 1000));
+          const { data } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+          if (data?.role) {
+            role = data.role;
+            break;
+          }
+        }
+    
+        if (role === 'admin') {
           window.location.href = '/admin';
         } else {
           setView('location');
         }
       } else {
-        setUser(null);
         setView('auth');
       }
     });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+  if (session) {
+    setUser(session.user);
+    
+    // Tenta até 5 vezes com 1 segundo de intervalo
+    // pois o trigger pode demorar para salvar em profiles
+    let role = null;
+    for (let i = 0; i < 5; i++) {
+      await new Promise(res => setTimeout(res, 1000));
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+      if (data?.role) {
+        role = data.role;
+        break;
+      }
+    }
+
+    if (role === 'admin') {
+      window.location.href = '/admin';
+    } else {
+      setView('location');
+    }
+  } else {
+    setUser(null);
+    setView('auth');
+  }
+});
 
     return () => subscription.unsubscribe();
   }, [isAdminRoute]);
