@@ -25,6 +25,7 @@ import {
   ChevronRight,
   LogOut
 } from 'lucide-react';
+import AdminPanel from './AdminPanel'
 
 // ─── FIDELITY HELPERS ───────────────────────────────────────────
 
@@ -266,6 +267,9 @@ const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
 };
 
 export default function App() {
+  if (window.location.pathname === '/admin') {
+    return <AdminPanel />
+  }
   const [view, setView] = useState<'auth' | 'register' | 'confirm-email' | 'welcome' | 'location' | 'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support'>('auth');
   const [location, setLocation] = useState<string>('');
   const [cart, setCart] = useState<{item: Item, quantity: number}[]>([]);
