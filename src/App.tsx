@@ -135,14 +135,12 @@ const pageVariants = {
 
 const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
   const branches = [
-    // Galhos principais grossos
     { d: "M390,0 C320,80 240,120 180,200 C120,280 80,360 40,450 C10,520 -20,600 0,700", w: 22, delay: 0 },
     { d: "M0,844 C80,760 160,700 220,620 C280,540 310,460 350,370 C380,300 410,220 390,140", w: 22, delay: 0.05 },
     { d: "M100,0 C140,100 120,180 100,280 C80,370 40,440 20,540 C0,620 10,720 50,844", w: 16, delay: 0.1 },
     { d: "M290,844 C260,740 280,660 260,560 C240,460 190,400 180,300 C170,210 200,120 220,0", w: 16, delay: 0.08 },
     { d: "M390,300 C320,320 260,300 200,320 C140,340 80,320 0,340", w: 12, delay: 0.15 },
     { d: "M0,500 C80,480 160,500 230,480 C300,460 350,480 390,460", w: 12, delay: 0.18 },
-    // Galhos médios
     { d: "M390,0 C370,40 390,80 360,100 C330,120 290,100 260,130", w: 10, delay: 0.12 },
     { d: "M180,200 C220,170 260,180 290,150 C320,120 330,80 390,60", w: 8, delay: 0.2 },
     { d: "M100,280 C140,260 170,240 200,210 C230,180 250,150 280,120", w: 8, delay: 0.22 },
@@ -151,7 +149,6 @@ const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
     { d: "M220,620 C180,650 140,640 100,670 C60,700 30,730 0,760", w: 7, delay: 0.2 },
     { d: "M350,370 C310,400 270,390 230,420 C190,450 160,470 120,500", w: 7, delay: 0.22 },
     { d: "M390,140 C340,160 300,150 260,180 C220,210 200,240 160,260", w: 7, delay: 0.25 },
-    // Galhos finos
     { d: "M390,0 C380,20 370,10 355,25 C340,40 345,60 330,70", w: 5, delay: 0.3 },
     { d: "M360,100 C345,115 330,108 315,120 C300,132 298,148 282,155", w: 5, delay: 0.32 },
     { d: "M290,150 C278,165 265,160 252,175 C239,190 240,208 225,215", w: 5, delay: 0.34 },
@@ -166,48 +163,36 @@ const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
     { d: "M290,844 C278,820 282,804 268,790 C254,776 236,778 225,762", w: 5, delay: 0.32 },
   ];
 
-  // Folhas espalhadas por toda a tela
   const leaves = [
-    // Cluster topo direito
     [375,8],[360,18],[385,28],[348,12],[370,35],[358,42],[342,28],[390,50],
-    // Cluster topo meio
     [215,15],[228,28],[202,32],[240,22],[218,42],[195,20],
-    // Cluster galho direito alto  
     [325,72],[338,62],[312,80],[348,88],[328,95],[308,68],
     [278,125],[292,115],[265,132],[285,145],[260,118],
-    // Cluster meio direito
     [255,182],[268,172],[242,190],[272,198],[248,168],
     [195,212],[208,202],[182,220],[212,228],[188,198],
-    // Cluster centro
     [155,262],[168,252],[142,270],[172,278],[148,248],
     [130,388],[143,378],[117,396],[147,404],[123,374],
     [200,325],[213,315],[187,333],[217,341],[193,311],
-    // Cluster esquerdo
     [48,318],[62,308],[35,326],[66,334],[42,304],
     [92,443],[105,433],[79,451],[109,459],[85,429],
     [18,543],[32,533],[5,551],[36,559],[12,529],
     [42,678],[55,668],[28,686],[60,694],[36,664],
-    // Cluster topo esquerdo
     [78,55],[92,45],[65,63],[96,71],[72,41],
     [32,83],[46,73],[19,91],[50,99],[26,69],
-    // Cluster inferior
     [80,718],[94,708],[67,726],[98,734],[74,704],
     [148,653],[162,643],[135,661],[166,669],[142,639],
     [108,768],[122,758],[95,776],[126,784],[102,754],
     [222,765],[236,755],[209,773],[240,781],[218,751],
     [268,592],[282,582],[255,600],[286,608],[262,578],
     [205,628],[219,618],[192,636],[223,644],[199,614],
-    // Cluster direito baixo
     [348,372],[362,362],[335,380],[366,388],[342,358],
     [315,422],[328,412],[302,430],[332,438],[308,408],
     [272,562],[285,552],[259,570],[289,578],[265,548],
     [232,422],[245,412],[219,430],[249,438],[225,408],
-    // Galho horizontal meio
     [88,322],[102,315],[75,330],[106,338],[82,312],
     [170,342],[183,335],[157,350],[187,358],[163,332],
     [242,332],[255,325],[229,340],[259,348],[235,322],
     [318,312],[331,305],[305,320],[335,328],[311,302],
-    // Galho horizontal baixo
     [58,482],[72,475],[45,490],[76,498],[52,472],
     [142,462],[155,455],[129,470],[159,478],[135,452],
     [215,472],[228,465],[202,480],[232,488],[208,462],
@@ -282,7 +267,6 @@ export default function App() {
   // null = ainda carregando | false = usuário normal | true = admin confirmado
   const [adminStatus, setAdminStatus] = useState<null | boolean>(null);
 
-  // Busca role do usuário no banco — sem loop, sem window.location
   const checkRole = React.useCallback(async (userId: string) => {
     const { data } = await supabase
       .from('profiles')
@@ -298,19 +282,11 @@ export default function App() {
     }
   }, []);
 
+  // ─── AUTH LISTENER UNIFICADO ───────────────────────────────────────────
+  // INITIAL_SESSION cobre: sessão existente ao abrir o app + retorno do OAuth (Google/Apple)
+  // SIGNED_IN cobre: login com email+senha
+  // SIGNED_OUT cobre: logout
   useEffect(() => {
-    // 1. Verifica sessão já existente (ex: admin recarrega a página)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        checkRole(session.user.id);
-      } else {
-        setAdminStatus(false);
-        setView('auth');
-      }
-    });
-
-    // 2. Escuta novos logins (Google, Apple, email+senha)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_OUT') {
@@ -319,9 +295,17 @@ export default function App() {
           setView('auth');
           return;
         }
-        if (event === 'SIGNED_IN' && session?.user) {
+
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
           setUser(session.user);
           checkRole(session.user.id);
+          return;
+        }
+
+        // INITIAL_SESSION sem sessão = não logado
+        if (event === 'INITIAL_SESSION' && !session) {
+          setAdminStatus(false);
+          setView('auth');
         }
       }
     );
@@ -344,7 +328,7 @@ export default function App() {
     );
   }
 
-  // Admin confirmado → renderiza painel direto, sem redirect de página
+  // Admin confirmado → renderiza painel direto
   if (adminStatus === true) {
     return <AdminPanel />;
   }
@@ -573,7 +557,6 @@ export default function App() {
             exit="exit"
             className="min-h-screen bg-brand-cream flex flex-col items-center justify-center p-6 text-center relative z-10"
           >
-            {/* Background Texture Feel */}
             <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-brand-dark via-brand-dark to-brand-dark pointer-events-none"></div>
 
             <div className="relative z-10 flex flex-col items-center w-full">
@@ -719,7 +702,6 @@ export default function App() {
             cartTotal={cartTotal}
             onBack={() => setView('cart')}
             onFinalize={async (paymentType: 'app' | 'local') => {
-              // Gera código do pedido
               let code: string;
               if (location === 'Retirada no Balcão') {
                 code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -739,7 +721,6 @@ export default function App() {
             
               setOrderCode(code);
             
-              // Salva pedido no Supabase
               if (user?.id) {
                 const { error } = await supabase
                   .from('orders')
@@ -762,7 +743,6 @@ export default function App() {
                   console.error('Erro ao salvar pedido:', error.message);
                 }
             
-                // [FIDELITY] Registra gasto e verifica meta
                 const result = await addSpentAndCheckGoal(user.id, cartTotal);
                 if (result.couponGenerated && result.couponCode) {
                   setFidelityNewCoupon(result.couponCode);
@@ -846,7 +826,6 @@ export default function App() {
               )}
             </div>
         
-            {/* [FIDELITY] Banner de cupom gerado */}
             {fidelityNewCoupon && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -903,7 +882,6 @@ function MenuScreen({ location, cartCount, cartTotal, onBack, onCart, onProfile,
       exit="exit"
       className="min-h-screen flex flex-col bg-brand-cream pb-32"
     >
-      {/* Sticky Header */}
       <div className="sticky top-0 z-40 bg-brand-dark text-brand-cream px-6 py-4 flex items-center justify-between shadow-md">
         <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-brand-gold/20 transition">
           <ArrowLeft size={24} />
@@ -926,7 +904,6 @@ function MenuScreen({ location, cartCount, cartTotal, onBack, onCart, onProfile,
         </button>
       </div>
 
-      {/* Category Tabs (Méqui Style) */}
       <div className="sticky top-[72px] z-30 bg-brand-cream/95 backdrop-blur-md pt-4 pb-4 shadow-sm border-b border-brand-gold/10">
         <div className="flex overflow-x-auto gap-3 px-6 hide-scrollbar snap-x">
           {CATEGORY_TABS.map(tab => {
@@ -956,7 +933,6 @@ function MenuScreen({ location, cartCount, cartTotal, onBack, onCart, onProfile,
         </div>
       </div>
 
-      {/* Item List */}
       <div className="p-6 space-y-6">
         <AnimatePresence mode="popLayout">
           {filteredMenu.map(item => {
@@ -1005,7 +981,6 @@ function MenuScreen({ location, cartCount, cartTotal, onBack, onCart, onProfile,
         </AnimatePresence>
       </div>
 
-      {/* Floating Checkout Button */}
       <AnimatePresence>
         {cartCount > 0 && (
           <motion.div 
@@ -1032,7 +1007,6 @@ function MenuScreen({ location, cartCount, cartTotal, onBack, onCart, onProfile,
         )}
       </AnimatePresence>
 
-      {/* Bottom App Navigation */}
       <BottomNav activeTab="home" cartCount={cartCount} onNavigate={(tab) => {
         if (tab === 'home') onBack();
         if (tab === 'cart') onCart();
@@ -1279,14 +1253,8 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
           </h2>
         </div>
         
-        {subView === 'orders' && (
-          <OrdersSubView userId={user?.id} />
-        )}
-
-        {subView === 'coupons' && (
-          <CouponsSubView userId={user?.id} />
-        )}
-
+        {subView === 'orders' && <OrdersSubView userId={user?.id} />}
+        {subView === 'coupons' && <CouponsSubView userId={user?.id} />}
         {subView === 'payments' && (
            <div className="space-y-4">
              <div className="bg-white p-5 rounded-2xl shadow-sm border border-brand-gold/20 flex items-center gap-4">
@@ -1305,25 +1273,14 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
              </button>
            </div>
         )}
-
-        {subView === 'fidelity' && (
-          <FidelitySubView userId={user?.id} />
-        )}
+        {subView === 'fidelity' && <FidelitySubView userId={user?.id} />}
 
         <BottomNav activeTab={subView === 'coupons' ? 'coupons' : 'profile'} cartCount={cartCount} onNavigate={(tab) => {
           if (tab === 'home') onHome();
           if (tab === 'cart') onCart();
-          if (tab === 'coupons') {
-            setSubView('coupons');
-            if(onCoupons) onCoupons();
-          }
-          if (tab === 'profile') {
-            setSubView('main');
-            if(onProfile) onProfile();
-          }
-           if (tab === 'support') {
-            if(onSupport) onSupport();
-          }
+          if (tab === 'coupons') { setSubView('coupons'); if(onCoupons) onCoupons(); }
+          if (tab === 'profile') { setSubView('main'); if(onProfile) onProfile(); }
+          if (tab === 'support') { if(onSupport) onSupport(); }
         }} />
       </motion.div>
     );
@@ -1356,52 +1313,33 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
 
       <div className="space-y-3">
          <button onClick={() => setSubView('orders')} className="w-full bg-white p-5 rounded-2xl border border-brand-gold/20 flex items-center justify-between font-bold text-brand-dark shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
-            <div className="flex items-center gap-3">
-               <ReceiptText size={20} className="text-brand-dark/50" />
-               Meus Pedidos
-            </div>
+            <div className="flex items-center gap-3"><ReceiptText size={20} className="text-brand-dark/50" />Meus Pedidos</div>
             <ChevronRight size={18} className="text-brand-dark/30" />
          </button>
          <button onClick={() => setSubView('coupons')} className="w-full bg-white p-5 rounded-2xl border border-brand-gold/20 flex items-center justify-between font-bold text-brand-dark shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
-            <div className="flex items-center gap-3">
-               <Gift size={20} className="text-brand-dark/50" />
-               Cupons e Vantagens
-            </div>
+            <div className="flex items-center gap-3"><Gift size={20} className="text-brand-dark/50" />Cupons e Vantagens</div>
             <ChevronRight size={18} className="text-brand-dark/30" />
          </button>
          <button onClick={() => setSubView('payments')} className="w-full bg-white p-5 rounded-2xl border border-brand-gold/20 flex items-center justify-between font-bold text-brand-dark shadow-sm hover:bg-gray-50 transition active:scale-[0.98]">
-            <div className="flex items-center gap-3">
-               <CreditCard size={20} className="text-brand-dark/50" />
-               Formas de Pagamento
-            </div>
+            <div className="flex items-center gap-3"><CreditCard size={20} className="text-brand-dark/50" />Formas de Pagamento</div>
             <ChevronRight size={18} className="text-brand-dark/30" />
          </button>
       </div>
 
       <button 
-        onClick={async () => {
-          await supabase.auth.signOut()
-        }} 
+        onClick={async () => { await supabase.auth.signOut() }} 
         className="mt-8 text-brand-red font-bold flex items-center justify-center gap-2 w-full pb-4 hover:underline"
       >
         <LogOut size={16} />
         Sair da Conta
       </button>
 
-      <BottomNav activeTab={subView === 'coupons' ? 'coupons' : 'profile'} cartCount={cartCount} onNavigate={(tab) => {
+      <BottomNav activeTab="profile" cartCount={cartCount} onNavigate={(tab) => {
         if (tab === 'home') onHome();
         if (tab === 'cart') onCart();
-        if (tab === 'coupons') {
-          setSubView('coupons');
-          if(onCoupons) onCoupons();
-        }
-        if (tab === 'profile') {
-          setSubView('main');
-          if(onProfile) onProfile();
-        }
-         if (tab === 'support') {
-          if(onSupport) onSupport();
-        }
+        if (tab === 'coupons') { setSubView('coupons'); if(onCoupons) onCoupons(); }
+        if (tab === 'profile') { setSubView('main'); if(onProfile) onProfile(); }
+        if (tab === 'support') { if(onSupport) onSupport(); }
       }} />
     </motion.div>
   );
@@ -1421,7 +1359,6 @@ function SupportScreen({ cartCount, onNavigate, onBack }: any) {
     setMessages(prev => [...prev, newMsg]);
     setInput('');
     
-    // Simulate reply
     setTimeout(() => {
       setMessages(prev => [...prev, { id: Date.now() + 1, text: 'Nossa equipe já vai te responder, aguarde um minutinho!', sender: 'restaurante', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
     }, 1500);
@@ -1482,9 +1419,6 @@ function SupportScreen({ cartCount, onNavigate, onBack }: any) {
   );
 }
 
-    // ─────────────────────────────────────────────
-// [FIDELITY] COMPONENTE: botão de progresso na tela principal do perfil
-// ─────────────────────────────────────────────
 function FidelityProgressButton({ onClick, userId }: { onClick: () => void; userId?: string }) {
   const [totalSpent, setTotalSpent] = useState(0);
 
@@ -1536,9 +1470,6 @@ function FidelityProgressButton({ onClick, userId }: { onClick: () => void; user
   );
 }
 
-// ─────────────────────────────────────────────
-// [FIDELITY] COMPONENTE: subview de fidelidade com dados reais
-// ─────────────────────────────────────────────
 function FidelitySubView({ userId }: { userId?: string }) {
   const [totalSpent, setTotalSpent] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -1657,10 +1588,7 @@ function OrdersSubView({ userId }: { userId?: string }) {
     </div>
   );
 }
-    
-// ─────────────────────────────────────────────
-// [FIDELITY] COMPONENTE: subview de cupons com dados reais
-// ─────────────────────────────────────────────
+
 function CouponsSubView({ userId }: { userId?: string }) {
   const [coupons, setCoupons] = useState<{ id: string; code: string; redeemed: boolean; created_at: string }[]>([]);
   const [loading, setLoading] = useState(true);
