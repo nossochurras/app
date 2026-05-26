@@ -268,12 +268,29 @@ export default function App() {
   const [adminStatus, setAdminStatus] = useState<null | boolean>(null);
 
   const checkRole = React.useCallback(async (userId: string) => {
-    const { data } = await supabase
+    // Usa getUser() para garantir token fresco, depois faz a query
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      setAdminStatus(false);
+      setView('location');
+      return;
+    }
+  
+    const { data, error } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', userId)
       .single();
-
+  
+    if (error) {
+      console.error('checkRole error:', error.message);
+      // Se falhar por qualquer razão, trata como usuário normal
+      setAdminStatus(false);
+      setView('location');
+      return;
+    }
+  
     if (data?.role === 'admin') {
       setAdminStatus(true);
     } else {
