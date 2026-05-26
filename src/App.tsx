@@ -267,7 +267,6 @@ const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
 };
 
 export default function App() {
-  // ✅ CORREÇÃO 1: Hooks ANTES de qualquer return condicional
   const [view, setView] = useState<
     'auth' | 'register' | 'confirm-email' | 'welcome' | 'location' |
     'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support'
@@ -280,122 +279,75 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAllLocations, setShowAllLocations] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null); // null = ainda verificando
+  // null = ainda carregando | false = usuário normal | true = admin confirmado
+  const [adminStatus, setAdminStatus] = useState<null | boolean>(null);
 
-  // ✅ CORREÇÃO 2: Detecção de rota admin como estado, resolvida via useEffect
-  const isAdminRoute =
-    window.location.pathname === '/admin' ||
-    window.location.hash === '#/admin';
+  // Busca role do usuário no banco — sem loop, sem window.location
+  const checkRole = React.useCallback(async (userId: string) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+
+    if (data?.role === 'admin') {
+      setAdminStatus(true);
+    } else {
+      setAdminStatus(false);
+      setView('location');
+    }
+  }, []);
 
   useEffect(() => {
-    if (!isAdminRoute) {
-      setIsAdmin(false);
-      return;
-    }
-    // Verifica se o usuário logado tem role admin
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) { setIsAdmin(false); return; }
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      setIsAdmin(data?.role === 'admin');
-    });
-  }, [isAdminRoute]);
-
-  // ✅ CORREÇÃO 3: onAuthStateChange NÃO interfere quando é rota admin
-  React.useEffect(() => {
-    if (isAdminRoute) return; // ignora listener de auth para rota admin
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session) {
+    // 1. Verifica sessão já existente (ex: admin recarrega a página)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
         setUser(session.user);
-    
-        let role = null;
-        for (let i = 0; i < 5; i++) {
-          await new Promise(res => setTimeout(res, 1000));
-          const { data } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-          if (data?.role) {
-            role = data.role;
-            break;
-          }
-        }
-    
-        if (role === 'admin') {
-          window.location.href = '/admin';
-        } else {
-          setView('location');
-        }
+        checkRole(session.user.id);
       } else {
+        setAdminStatus(false);
         setView('auth');
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-  if (session) {
-    setUser(session.user);
-    
-    // Tenta até 5 vezes com 1 segundo de intervalo
-    // pois o trigger pode demorar para salvar em profiles
-    let role = null;
-    for (let i = 0; i < 5; i++) {
-      await new Promise(res => setTimeout(res, 1000));
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
-      if (data?.role) {
-        role = data.role;
-        break;
+    // 2. Escuta novos logins (Google, Apple, email+senha)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setAdminStatus(false);
+          setView('auth');
+          return;
+        }
+        if (event === 'SIGNED_IN' && session?.user) {
+          setUser(session.user);
+          checkRole(session.user.id);
+        }
       }
-    }
-
-    if (role === 'admin') {
-      window.location.href = '/admin';
-    } else {
-      setView('location');
-    }
-  } else {
-    setUser(null);
-    setView('auth');
-  }
-});
+    );
 
     return () => subscription.unsubscribe();
-  }, [isAdminRoute]);
+  }, [checkRole]);
 
-  // ✅ CORREÇÃO 4: Render condicional APÓS todos os hooks
-  if (isAdminRoute) {
-    if (isAdmin === null) {
-      // Ainda verificando permissão
-      return (
-        <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <svg className="animate-spin h-8 w-8 text-[#e85d26]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-            </svg>
-            <p className="text-white/40 text-sm font-mono">verificando permissões...</p>
-          </div>
+  // Tela de carregamento enquanto verifica sessão/role
+  if (adminStatus === null) {
+    return (
+      <div className="min-h-screen bg-brand-cream flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <svg className="animate-spin h-8 w-8 text-brand-red" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+          </svg>
+          <p className="text-brand-dark/40 text-sm">Verificando...</p>
         </div>
-      );
-    }
-    if (isAdmin === false) {
-      // Não é admin — redireciona
-      window.location.href = '/';
-      return null;
-    }
-    // É admin confirmado
-    return <AdminPanel />;
+      </div>
+    );
   }
 
-  // ... resto do componente App continua igual (cartTotal, cartCount, return JSX...)
+  // Admin confirmado → renderiza painel direto, sem redirect de página
+  if (adminStatus === true) {
+    return <AdminPanel />;
+  }
 
   const handleLoginClick = async (provider: 'google' | 'apple') => {
     await supabase.auth.signInWithOAuth({
