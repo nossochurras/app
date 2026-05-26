@@ -313,9 +313,23 @@ export default function App() {
       else setView('auth');
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) { setUser(session.user); setView('location'); }
-      else { setUser(null); setView('auth'); }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session) {
+        setUser(session.user);
+        const { data } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        if (data?.role === 'admin') {
+          window.location.href = '/admin';
+        } else {
+          setView('location');
+        }
+      } else {
+        setUser(null);
+        setView('auth');
+      }
     });
 
     return () => subscription.unsubscribe();
