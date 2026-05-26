@@ -268,7 +268,7 @@ const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
 
 export default function App() {
   // ✅ CORREÇÃO 1: Hooks ANTES de qualquer return condicional
-  const [view, setView] = useState
+  const [view, setView] = useState<
     'auth' | 'register' | 'confirm-email' | 'welcome' | 'location' |
     'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support'
   >('auth');
