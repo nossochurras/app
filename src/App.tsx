@@ -23,7 +23,8 @@ import {
   ReceiptText,
   Gift,
   ChevronRight,
-  LogOut
+  LogOut,
+  Scale,
 } from 'lucide-react';
 import AdminPanel from './AdminPanel'
 
@@ -90,25 +91,26 @@ async function fetchActiveCoupons(userId: string) {
   return data ?? [];
 }
 
-type Item = {
-  id: number;
-  name: string;
-  category: 'Carnes' | 'Acompanhamentos' | 'Bebidas';
-  desc: string;
-  price: number;
-  image: string;
-};
+// ─── TYPES ───────────────────────────────────────────────────────
 
-const MENU: Item[] = [
-  { id: 1, name: 'Picanha Premium', category: 'Carnes', desc: '500g do nosso melhor corte, suculência garantida.', price: 149.9, image: 'https://images.unsplash.com/photo-1558030006-450675393462?auto=format&fit=crop&q=80&w=800' },
-  { id: 2, name: 'Fraldinha na Mostarda', category: 'Carnes', desc: 'Peça marinada com especiarias e mostarda rústica.', price: 119.9, image: 'https://images.unsplash.com/photo-1603048297172-c92544798d5e?auto=format&fit=crop&q=80&w=800' },
-  { id: 3, name: 'Linguiça Artesanal', category: 'Carnes', desc: 'Porção com 400g, sabor autêntico do Empório.', price: 45.0, image: 'https://images.unsplash.com/photo-1535475143306-031f50f28359?auto=format&fit=crop&q=80&w=800' },
-  { id: 4, name: 'Pão de Alho Trufado', category: 'Acompanhamentos', desc: 'Nosso pão de alho especial com toque de trufa e queijo.', price: 28.0, image: 'https://images.unsplash.com/photo-1619068862271-8a6e1f7e4c8c?auto=format&fit=crop&q=80&w=800' },
-  { id: 5, name: 'Farofa da Casa', category: 'Acompanhamentos', desc: 'Com bacon crocante e cebola caramelizada.', price: 22.0, image: 'https://images.unsplash.com/photo-1504113886839-4c224f115d08?auto=format&fit=crop&q=80&w=800' },
-  { id: 6, name: 'Chopp Pilsen Gelado', category: 'Bebidas', desc: 'Estupidamente gelado, 500ml.', price: 15.0, image: 'https://images.unsplash.com/photo-1650381615654-20aeb297486e?auto=format&fit=crop&q=80&w=800' },
-  { id: 7, name: 'Caipirinha de Limão', category: 'Bebidas', desc: 'Limão tahiti, cachaça artesanal e gelo.', price: 24.0, image: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&q=80&w=800' },
-  { id: 8, name: 'Refrigerante Lata', category: 'Bebidas', desc: '350ml.', price: 8.0, image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=800' },
-];
+type WeightOption = {
+  id: string
+  label: string
+  max_grams: number
+  price: number
+  sort_order: number
+}
+
+type DynamicMenuItem = {
+  id: number | string
+  name: string
+  category: 'Carnes' | 'Acompanhamentos' | 'Bebidas'
+  desc: string
+  price: number
+  image: string
+  weight_mode: boolean
+  weight_options: WeightOption[]
+}
 
 const LOCATIONS = Array.from({ length: 10 }, (_, i) => `Churrasqueira ${i + 1}`);
 
@@ -254,21 +256,28 @@ const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
 export default function App() {
   const [view, setView] = useState<
     'auth' | 'register' | 'confirm-email' | 'welcome' | 'location' |
-    'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support'
+    'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support' | 'awaiting_weighing'
   >('auth');
   const [location, setLocation] = useState<string>('');
-  const [cart, setCart] = useState<{item: Item, quantity: number}[]>([]);
+  const [cart, setCart] = useState<{
+    item: DynamicMenuItem
+    quantity: number
+    cartKey: string
+    weightOption: WeightOption | null
+    price: number
+  }[]>([]);
   const [orderCode, setOrderCode] = useState<string>('');
   const [fidelityNewCoupon, setFidelityNewCoupon] = useState<string | null>(null);
   const [loginAnim, setLoginAnim] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAllLocations, setShowAllLocations] = useState(false);
   const [user, setUser] = useState<any>(null);
-  // null = ainda carregando | false = usuário normal | true = admin confirmado
   const [adminStatus, setAdminStatus] = useState<null | boolean>(null);
+  const [menuItems, setMenuItems] = useState<DynamicMenuItem[]>([]);
+  const [weightModal, setWeightModal] = useState<DynamicMenuItem | null>(null);
+  const [awaitingWeighingOrderId, setAwaitingWeighingOrderId] = useState<string | null>(null);
 
   const checkRole = React.useCallback(async (userId: string) => {
-    // Usa getUser() para garantir token fresco, depois faz a query
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
@@ -285,7 +294,6 @@ export default function App() {
   
     if (error) {
       console.error('checkRole error:', error.message);
-      // Se falhar por qualquer razão, trata como usuário normal
       setAdminStatus(false);
       setView('location');
       return;
@@ -299,10 +307,7 @@ export default function App() {
     }
   }, []);
 
-  // ─── AUTH LISTENER UNIFICADO ───────────────────────────────────────────
-  // INITIAL_SESSION cobre: sessão existente ao abrir o app + retorno do OAuth (Google/Apple)
-  // SIGNED_IN cobre: login com email+senha
-  // SIGNED_OUT cobre: logout
+  // ─── AUTH LISTENER ────────────────────────────────────────────
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -319,7 +324,6 @@ export default function App() {
           return;
         }
 
-        // INITIAL_SESSION sem sessão = não logado
         if (event === 'INITIAL_SESSION' && !session) {
           setAdminStatus(false);
           setView('auth');
@@ -330,7 +334,28 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [checkRole]);
 
-  // Tela de carregamento enquanto verifica sessão/role
+  // ─── FETCH MENU FROM SUPABASE ─────────────────────────────────
+  useEffect(() => {
+    supabase
+      .from('menu_items')
+      .select('*, weight_options(*)')
+      .eq('available', true)
+      .order('sort_order')
+      .then(({ data }) => {
+        if (!data) return;
+        setMenuItems(data.map(item => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          desc: item.description,
+          price: item.price,
+          image: item.image_url,
+          weight_mode: item.weight_mode ?? false,
+          weight_options: (item.weight_options ?? []).sort((a: WeightOption, b: WeightOption) => a.sort_order - b.sort_order),
+        })));
+      });
+  }, [user]);
+
   if (adminStatus === null) {
     return (
       <div className="min-h-screen bg-brand-cream flex items-center justify-center">
@@ -345,7 +370,6 @@ export default function App() {
     );
   }
 
-  // Admin confirmado → renderiza painel direto
   if (adminStatus === true) {
     return <AdminPanel />;
   }
@@ -357,46 +381,112 @@ export default function App() {
         redirectTo: 'https://freofigures-nosso-churras.7t6kue.easypanel.host/',
         skipBrowserRedirect: false,
       }
-    })
-  }
+    });
+  };
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const form = e.currentTarget
-    const name = (form.elements.namedItem('name') as HTMLInputElement).value
-    const email = (form.elements.namedItem('email') as HTMLInputElement).value
-    const password = (form.elements.namedItem('password') as HTMLInputElement).value
-    const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } })
-    if (!error) setView('confirm-email')
-  }
+    e.preventDefault();
+    const form = e.currentTarget;
+    const name = (form.elements.namedItem('name') as HTMLInputElement).value;
+    const email = (form.elements.namedItem('email') as HTMLInputElement).value;
+    const password = (form.elements.namedItem('password') as HTMLInputElement).value;
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+    if (!error) setView('confirm-email');
+  };
 
-  const handleAddToCart = (item: Item) => {
+  const handleAddToCart = (item: DynamicMenuItem, weightOption?: WeightOption) => {
+    if (item.weight_mode && item.weight_options.length > 0 && !weightOption) {
+      setWeightModal(item);
+      return;
+    }
+
+    const cartKey = weightOption ? `${item.id}_${weightOption.id}` : String(item.id);
+    const price = weightOption ? weightOption.price : item.price;
+
     setCart(prev => {
-      const existing = prev.find(i => i.item.id === item.id);
+      const existing = prev.find(i => i.cartKey === cartKey);
       if (existing) {
-        return prev.map(i => i.item.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+        return prev.map(i => i.cartKey === cartKey ? { ...i, quantity: i.quantity + 1 } : i);
       }
-      return [...prev, { item, quantity: 1 }];
+      return [...prev, {
+        item,
+        quantity: 1,
+        cartKey,
+        weightOption: weightOption ?? null,
+        price,
+      }];
     });
   };
 
-  const handleRemoveFromCart = (itemId: number) => {
+  const handleRemoveFromCart = (cartKey: string) => {
     setCart(prev => {
-      const existing = prev.find(i => i.item.id === itemId);
+      const existing = prev.find(i => i.cartKey === cartKey);
       if (existing && existing.quantity > 1) {
-        return prev.map(i => i.item.id === itemId ? { ...i, quantity: i.quantity - 1 } : i);
+        return prev.map(i => i.cartKey === cartKey ? { ...i, quantity: i.quantity - 1 } : i);
       }
-      return prev.filter(i => i.item.id !== itemId);
+      return prev.filter(i => i.cartKey !== cartKey);
     });
   };
 
-  const cartTotal = cart.reduce((acc, curr) => acc + (curr.item.price * curr.quantity), 0);
+  const cartTotal = cart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
   const cartCount = cart.reduce((acc, curr) => acc + curr.quantity, 0);
 
   return (
     <div className="font-sans min-h-screen bg-brand-cream text-brand-dark selection:bg-brand-red selection:text-white pb-safe max-w-md mx-auto shadow-2xl relative bg-[url('https://www.transparenttextures.com/patterns/rice-paper-2.png')] overflow-hidden">
       
       <BranchTransition isVisible={loginAnim} />
+
+      {/* MODAL SELEÇÃO DE FAIXA DE PESO */}
+      <AnimatePresence>
+        {weightModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 z-[200] flex items-end justify-center p-4"
+            onClick={() => setWeightModal(null)}
+          >
+            <motion.div
+              initial={{ y: 100 }}
+              animate={{ y: 0 }}
+              exit={{ y: 100 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-brand-cream w-full max-w-md rounded-3xl p-6 shadow-2xl"
+            >
+              <h3 className="font-display text-2xl text-brand-dark mb-1">{weightModal.name}</h3>
+              <p className="text-sm text-brand-dark/60 mb-6">Escolha a faixa de peso desejada:</p>
+
+              <div className="space-y-3 mb-6">
+                {weightModal.weight_options.map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      handleAddToCart(weightModal, opt);
+                      setWeightModal(null);
+                    }}
+                    className="w-full bg-white border-2 border-brand-gold/20 rounded-2xl p-4 flex items-center justify-between hover:border-brand-red hover:bg-brand-red/5 transition text-left"
+                  >
+                    <div>
+                      <div className="font-bold text-brand-dark">{opt.label}</div>
+                      <div className="text-xs text-brand-dark/50 mt-0.5">Até {opt.max_grams}g</div>
+                    </div>
+                    <div className="font-display text-xl text-brand-red">
+                      R$ {Number(opt.price).toFixed(2).replace('.', ',')}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setWeightModal(null)}
+                className="w-full py-3 text-brand-dark/50 font-bold hover:text-brand-dark transition"
+              >
+                Cancelar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence mode="wait">
         
@@ -686,6 +776,7 @@ export default function App() {
         {/* MENU SCREEN */}
         {view === 'menu' && (
           <MenuScreen 
+            menuItems={menuItems}
             location={location} 
             cartCount={cartCount}
             cartTotal={cartTotal}
@@ -740,9 +831,11 @@ export default function App() {
               }
             
               setOrderCode(code);
+
+              const hasWeightItem = cart.some(c => c.item.weight_mode);
             
               if (user?.id) {
-                const { error } = await supabase
+                const { data: orderData, error } = await supabase
                   .from('orders')
                   .insert({
                     user_id: user.id,
@@ -750,17 +843,32 @@ export default function App() {
                     items: cart.map(c => ({
                       id: c.item.id,
                       name: c.item.name,
-                      price: c.item.price,
+                      price: c.price,
                       quantity: c.quantity,
+                      weight_mode: c.item.weight_mode,
+                      chosen_label: c.weightOption?.label ?? null,
+                      chosen_max_grams: c.weightOption?.max_grams ?? null,
+                      weight_option_id: c.weightOption?.id ?? null,
+                      unit_price: c.price,
+                      final_price: null,
+                      real_grams: null,
                     })),
                     total: cartTotal,
                     payment_type: paymentType,
                     order_code: code,
-                    status: 'pending',
-                  });
+                    status: hasWeightItem ? 'awaiting_weighing' : 'pending',
+                  })
+                  .select('id')
+                  .single();
             
                 if (error) {
                   console.error('Erro ao salvar pedido:', error.message);
+                }
+
+                if (orderData?.id && hasWeightItem) {
+                  setAwaitingWeighingOrderId(orderData.id);
+                  setView('awaiting_weighing');
+                  return;
                 }
             
                 const result = await addSpentAndCheckGoal(user.id, cartTotal);
@@ -800,6 +908,25 @@ export default function App() {
                if (tab === 'coupons') setView('coupons');
                if (tab === 'cart') setView('cart');
                if (tab === 'profile') setView('profile');
+            }}
+          />
+        )}
+
+        {/* AWAITING WEIGHING SCREEN */}
+        {view === 'awaiting_weighing' && awaitingWeighingOrderId && (
+          <AwaitingWeighingScreen
+            key="awaiting_weighing"
+            orderId={awaitingWeighingOrderId}
+            orderCode={orderCode}
+            location={location}
+            onConfirmed={async (finalPrice: number) => {
+              if (user?.id) {
+                const result = await addSpentAndCheckGoal(user.id, finalPrice);
+                if (result.couponGenerated && result.couponCode) {
+                  setFidelityNewCoupon(result.couponCode);
+                }
+              }
+              setView('success');
             }}
           />
         )}
@@ -867,6 +994,7 @@ export default function App() {
                 setCart([]);
                 setOrderCode('');
                 setFidelityNewCoupon(null);
+                setAwaitingWeighingOrderId(null);
                 setView('welcome');
               }}
               className="bg-brand-cream text-brand-red font-bold text-lg py-4 px-10 rounded-full hover:scale-105 transition shadow-xl"
@@ -881,6 +1009,180 @@ export default function App() {
   );
 }
 
+// ─── AWAITING WEIGHING SCREEN ─────────────────────────────────────
+
+function AwaitingWeighingScreen({
+  orderId,
+  orderCode,
+  location,
+  onConfirmed,
+}: {
+  orderId: string
+  orderCode: string
+  location: string
+  onConfirmed: (finalPrice: number) => void
+}) {
+  const [notification, setNotification] = useState<{
+    message: string
+    photo_url: string | null
+    real_grams: number
+    final_price: number
+  } | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from('order_notifications')
+      .select('*')
+      .eq('order_id', orderId)
+      .eq('type', 'weight_update')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setNotification(data);
+      });
+
+    const channel = supabase
+      .channel(`weighing-${orderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'order_notifications',
+          filter: `order_id=eq.${orderId}`,
+        },
+        (payload) => {
+          setNotification(payload.new as any);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [orderId]);
+
+  const handleConfirm = async () => {
+    setConfirmed(true);
+    await supabase
+      .from('orders')
+      .update({ status: 'preparing' })
+      .eq('id', orderId);
+    onConfirmed(notification?.final_price ?? 0);
+  };
+
+  return (
+    <motion.div
+      key="awaiting_weighing"
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="min-h-screen bg-brand-cream flex flex-col items-center justify-center p-6 text-center"
+    >
+      {!notification ? (
+        <div className="flex flex-col items-center gap-6 max-w-sm w-full">
+          <div className="w-24 h-24 bg-brand-red/10 rounded-full flex items-center justify-center">
+            <Scale size={48} className="text-brand-red animate-pulse" />
+          </div>
+          <h2 className="font-display text-4xl text-brand-dark">Aguardando Pesagem</h2>
+          <p className="text-brand-dark/70 leading-relaxed">
+            Seu pedido foi recebido! Estamos pesando seu corte na balança para garantir o preço exato. Aguarde um momento...
+          </p>
+
+          <div className="w-full bg-white border border-brand-gold/20 rounded-3xl p-6 shadow-sm space-y-4 text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-brand-red rounded-full flex items-center justify-center">
+                <CheckCircle size={16} className="text-white" />
+              </div>
+              <div>
+                <div className="font-bold text-sm text-brand-dark">Pedido recebido</div>
+                <div className="text-xs text-brand-dark/50">#{orderCode} • {location}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-brand-gold/30 rounded-full flex items-center justify-center">
+                <Scale size={16} className="text-brand-dark/60" />
+              </div>
+              <div>
+                <div className="font-bold text-sm text-brand-dark/60">Pesando seu corte...</div>
+                <div className="text-xs text-brand-dark/40">Você será avisado em instantes</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 opacity-30">
+              <div className="w-8 h-8 bg-brand-cream rounded-full flex items-center justify-center border-2 border-brand-dark/20">
+                <ChefHat size={16} className="text-brand-dark/40" />
+              </div>
+              <div>
+                <div className="font-bold text-sm text-brand-dark/40">Preparando</div>
+                <div className="text-xs text-brand-dark/30">Após confirmação</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-1.5 mt-2">
+            {[0, 1, 2].map(i => (
+              <motion.div
+                key={i}
+                className="w-2 h-2 bg-brand-red rounded-full"
+                animate={{ opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.4 }}
+              />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center gap-6 max-w-sm w-full"
+        >
+          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center">
+            <CheckCircle size={48} className="text-green-500" />
+          </div>
+          <h2 className="font-display text-4xl text-brand-dark">Pesagem Concluída!</h2>
+          <p className="text-brand-dark/70">Confira o peso e o valor final do seu corte:</p>
+
+          {notification.photo_url && (
+            <div className="w-full rounded-3xl overflow-hidden shadow-lg border border-brand-gold/20">
+              <img
+                src={notification.photo_url}
+                alt="Foto da balança"
+                className="w-full object-cover max-h-56"
+              />
+            </div>
+          )}
+
+          <div className="w-full bg-brand-dark text-brand-cream rounded-3xl p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-4 pb-4 border-b border-white/10">
+              <span className="text-brand-cream/60 text-sm">Peso real</span>
+              <span className="font-bold text-lg">{notification.real_grams}g</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-brand-cream/60 text-sm">Valor final</span>
+              <span className="font-display text-2xl text-brand-red">
+                R$ {Number(notification.final_price).toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-xs text-brand-dark/50 px-4">{notification.message}</p>
+
+          <button
+            onClick={handleConfirm}
+            disabled={confirmed}
+            className="w-full bg-brand-red text-white p-5 rounded-2xl font-bold text-lg shadow-2xl hover:bg-red-700 transition disabled:opacity-50"
+          >
+            {confirmed ? 'Confirmando...' : 'Confirmar e Continuar'}
+          </button>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── CATEGORY TABS ────────────────────────────────────────────────
+
 const CATEGORY_TABS = [
   { id: 'Todos', label: 'Tudo', icon: LayoutGrid, color: 'text-brand-dark' },
   { id: 'Carnes', label: 'Cortes', icon: Beef, color: 'text-brand-red' },
@@ -888,10 +1190,10 @@ const CATEGORY_TABS = [
   { id: 'Bebidas', label: 'Bebidas', icon: Beer, color: 'text-yellow-600' },
 ];
 
-function MenuScreen({ location, cartCount, cartTotal, onBack, onCart, onProfile, onCoupons, onSupport, cartItems, onAdd, onRemove }: any) {
+function MenuScreen({ menuItems, location, cartCount, cartTotal, onBack, onCart, onProfile, onCoupons, onSupport, cartItems, onAdd, onRemove }: any) {
   const [activeCat, setActiveCat] = useState<'Todos' | 'Carnes' | 'Acompanhamentos' | 'Bebidas'>('Todos');
 
-  const filteredMenu = activeCat === 'Todos' ? MENU : MENU.filter(i => i.category === activeCat);
+  const filteredMenu = activeCat === 'Todos' ? menuItems : menuItems.filter((i: any) => i.category === activeCat);
 
   return (
     <motion.div
@@ -948,55 +1250,76 @@ function MenuScreen({ location, cartCount, cartTotal, onBack, onCart, onProfile,
                   {tab.label}
                 </span>
               </button>
-            )
+            );
           })}
         </div>
       </div>
 
       <div className="p-6 space-y-6">
         <AnimatePresence mode="popLayout">
-          {filteredMenu.map(item => {
-             const cartItem = cartItems.find(i => i.item.id === item.id);
-             return (
-               <motion.div 
-                 layout
-                 initial={{ opacity: 0, y: 20 }}
-                 animate={{ opacity: 1, y: 0 }}
-                 exit={{ opacity: 0, scale: 0.95 }}
-                 key={item.id} 
-                 className="bg-white rounded-3xl overflow-hidden shadow-sm border border-brand-gold/20 flex flex-col hover:shadow-md transition"
-               >
-                 <div className="h-48 relative overflow-hidden bg-brand-cream">
-                   <img src={item.image} alt={item.name} className="w-full h-full object-cover hover:scale-105 transition duration-500" />
-                   <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-brand-dark">
-                     {item.category}
-                   </div>
-                 </div>
-                 <div className="p-5 flex-1 flex flex-col">
-                   <div className="flex justify-between items-start mb-2">
-                     <h3 className="font-display text-2xl text-brand-dark leading-tight max-w-[70%]">{item.name}</h3>
-                     <span className="font-display text-xl text-brand-red whitespace-nowrap leading-tight">
-                       R$ {item.price.toFixed(2).replace('.', ',')}
-                     </span>
-                   </div>
-                   <p className="text-brand-dark/60 text-sm mb-6 flex-1 leading-relaxed">{item.desc}</p>
-                   
-                   <div className="mt-auto flex justify-end">
-                     {cartItem ? (
-                       <div className="flex items-center gap-4 bg-brand-cream rounded-full p-1 border border-brand-gold/40 shadow-inner">
-                         <button onClick={() => onRemove(item.id)} className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-brand-dark hover:bg-brand-red hover:text-white transition shadow-sm"><Minus size={18} /></button>
-                         <span className="font-bold text-lg w-4 text-center">{cartItem.quantity}</span>
-                         <button onClick={() => onAdd(item)} className="w-10 h-10 bg-brand-red rounded-full flex items-center justify-center text-white hover:bg-red-700 transition shadow-sm"><Plus size={18} /></button>
-                       </div>
-                     ) : (
+          {filteredMenu.map((item: DynamicMenuItem) => {
+            // Para itens sem peso, busca pelo id simples; para itens com peso, não mostra contador único
+            const cartItemsForThisMenu = cartItems.filter((i: any) => i.item.id === item.id);
+            const simpleCartItem = cartItemsForThisMenu.find((i: any) => !i.weightOption);
+            const totalQtyInCart = cartItemsForThisMenu.reduce((acc: number, i: any) => acc + i.quantity, 0);
+
+            return (
+              <motion.div 
+                layout
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                key={item.id} 
+                className="bg-white rounded-3xl overflow-hidden shadow-sm border border-brand-gold/20 flex flex-col hover:shadow-md transition"
+              >
+                <div className="h-48 relative overflow-hidden bg-brand-cream">
+                  <img src={item.image} alt={item.name} className="w-full h-full object-cover hover:scale-105 transition duration-500" />
+                  <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-brand-dark">
+                    {item.category}
+                  </div>
+                  {item.weight_mode && (
+                    <div className="absolute top-3 left-3 bg-brand-dark/80 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-brand-gold flex items-center gap-1">
+                      <Scale size={12} /> Por peso
+                    </div>
+                  )}
+                </div>
+                <div className="p-5 flex-1 flex flex-col">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-display text-2xl text-brand-dark leading-tight max-w-[70%]">{item.name}</h3>
+                    <span className="font-display text-xl text-brand-red whitespace-nowrap leading-tight">
+                      {item.weight_mode && item.weight_options.length > 0
+                        ? `a partir de R$ ${Math.min(...item.weight_options.map(o => o.price)).toFixed(2).replace('.', ',')}`
+                        : `R$ ${item.price.toFixed(2).replace('.', ',')}`}
+                    </span>
+                  </div>
+                  <p className="text-brand-dark/60 text-sm mb-6 flex-1 leading-relaxed">{item.desc}</p>
+                  
+                  <div className="mt-auto flex justify-end">
+                    {item.weight_mode ? (
+                      // Itens por peso: sempre mostra botão "Adicionar" (abre modal de faixa)
+                      <div className="flex items-center gap-3">
+                        {totalQtyInCart > 0 && (
+                          <span className="text-xs text-brand-dark/50 font-bold">{totalQtyInCart} no carrinho</span>
+                        )}
                         <button onClick={() => onAdd(item)} className="bg-brand-dark text-brand-gold px-8 py-3 rounded-full font-bold text-sm hover:bg-black transition flex items-center gap-2 shadow-md">
-                          <Plus size={18} /> Adicionar
+                          <Scale size={16} /> Escolher Peso
                         </button>
-                     )}
-                   </div>
-                 </div>
-               </motion.div>
-             );
+                      </div>
+                    ) : simpleCartItem ? (
+                      <div className="flex items-center gap-4 bg-brand-cream rounded-full p-1 border border-brand-gold/40 shadow-inner">
+                        <button onClick={() => onRemove(simpleCartItem.cartKey)} className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-brand-dark hover:bg-brand-red hover:text-white transition shadow-sm"><Minus size={18} /></button>
+                        <span className="font-bold text-lg w-4 text-center">{simpleCartItem.quantity}</span>
+                        <button onClick={() => onAdd(item)} className="w-10 h-10 bg-brand-red rounded-full flex items-center justify-center text-white hover:bg-red-700 transition shadow-sm"><Plus size={18} /></button>
+                      </div>
+                    ) : (
+                       <button onClick={() => onAdd(item)} className="bg-brand-dark text-brand-gold px-8 py-3 rounded-full font-bold text-sm hover:bg-black transition flex items-center gap-2 shadow-md">
+                         <Plus size={18} /> Adicionar
+                       </button>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            );
           })}
         </AnimatePresence>
       </div>
@@ -1038,7 +1361,7 @@ function MenuScreen({ location, cartCount, cartTotal, onBack, onCart, onProfile,
   );
 }
 
-function CartScreen({ cart, location, cartTotal, onBack, onAdd, onRemove, onCheckout }) {
+function CartScreen({ cart, location, cartTotal, onBack, onAdd, onRemove, onCheckout }: any) {
   return (
     <motion.div
       key="cart"
@@ -1065,27 +1388,35 @@ function CartScreen({ cart, location, cartTotal, onBack, onAdd, onRemove, onChec
         ) : (
           <div className="space-y-4">
             <AnimatePresence>
-              {cart.map(({item, quantity}) => (
-                <motion.div 
-                  key={item.id} 
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, x: -100 }}
-                  className="bg-white p-4 rounded-2xl shadow-sm border border-brand-gold/20 flex items-center gap-4"
-                >
-                   <img src={item.image} alt={item.name} className="w-16 h-16 rounded-xl object-cover" />
-                   <div className="flex-1">
-                     <h4 className="font-bold text-brand-dark leading-tight mb-1">{item.name}</h4>
-                     <div className="text-brand-red font-display tracking-wider">R$ {(item.price * quantity).toFixed(2).replace('.', ',')}</div>
-                   </div>
-                   <div className="flex flex-col items-center gap-1 bg-brand-cream rounded-full px-1 py-1 border border-brand-gold/30">
-                      <button onClick={() => onAdd(item)} className="w-8 h-8 flex items-center justify-center text-brand-red hover:bg-white rounded-full transition"><Plus size={14}/></button>
-                      <span className="font-bold text-sm w-4 text-center">{quantity}</span>
-                      <button onClick={() => onRemove(item.id)} className="w-8 h-8 flex items-center justify-center text-brand-dark hover:bg-white rounded-full transition"><Minus size={14}/></button>
-                   </div>
-                </motion.div>
-              ))}
+              {cart.map((cartItem: any) => {
+                const { item, quantity, weightOption, price, cartKey } = cartItem;
+                return (
+                  <motion.div 
+                    key={cartKey}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, x: -100 }}
+                    className="bg-white p-4 rounded-2xl shadow-sm border border-brand-gold/20 flex items-center gap-4"
+                  >
+                     <img src={item.image} alt={item.name} className="w-16 h-16 rounded-xl object-cover" />
+                     <div className="flex-1">
+                       <h4 className="font-bold text-brand-dark leading-tight mb-1">{item.name}</h4>
+                       {weightOption && (
+                         <div className="text-xs text-purple-600 font-medium mb-1">
+                           {weightOption.label}
+                         </div>
+                       )}
+                       <div className="text-brand-red font-display tracking-wider">R$ {(price * quantity).toFixed(2).replace('.', ',')}</div>
+                     </div>
+                     <div className="flex flex-col items-center gap-1 bg-brand-cream rounded-full px-1 py-1 border border-brand-gold/30">
+                        <button onClick={() => onAdd(item, weightOption ?? undefined)} className="w-8 h-8 flex items-center justify-center text-brand-red hover:bg-white rounded-full transition"><Plus size={14}/></button>
+                        <span className="font-bold text-sm w-4 text-center">{quantity}</span>
+                        <button onClick={() => onRemove(cartKey)} className="w-8 h-8 flex items-center justify-center text-brand-dark hover:bg-white rounded-full transition"><Minus size={14}/></button>
+                     </div>
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
 
             <motion.div layout className="mt-8 bg-brand-dark text-brand-cream p-6 rounded-3xl shadow-xl relative overflow-hidden">
@@ -1122,7 +1453,7 @@ function CartScreen({ cart, location, cartTotal, onBack, onAdd, onRemove, onChec
   );
 }
 
-function CheckoutScreen({ location, cartTotal, onBack, onFinalize }) {
+function CheckoutScreen({ location, cartTotal, onBack, onFinalize }: any) {
   const [paymentType, setPaymentType] = useState<'app' | 'local'>('app');
 
   return (
@@ -1347,7 +1678,7 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
       </div>
 
       <button 
-        onClick={async () => { await supabase.auth.signOut() }} 
+        onClick={async () => { await supabase.auth.signOut(); }} 
         className="mt-8 text-brand-red font-bold flex items-center justify-center gap-2 w-full pb-4 hover:underline"
       >
         <LogOut size={16} />
@@ -1587,7 +1918,10 @@ function OrdersSubView({ userId }: { userId?: string }) {
                 <div className="text-sm text-brand-dark/60 mt-0.5">{date}</div>
               </div>
               <div className="bg-yellow-100 text-yellow-700 font-bold text-[10px] px-3 py-1.5 rounded-md tracking-wider uppercase">
-                {order.status === 'pending' ? 'Em andamento' : order.status}
+                {order.status === 'pending' ? 'Em andamento' :
+                 order.status === 'awaiting_weighing' ? 'Aguardando pesagem' :
+                 order.status === 'preparing' ? 'Preparando' :
+                 order.status}
               </div>
             </div>
             <div className="text-xs text-brand-dark/50 mb-1 flex items-center gap-1">
