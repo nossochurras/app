@@ -267,7 +267,7 @@ const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
 };
 
 export default function App() {
-  if (window.location.pathname === '/admin') {
+  if (window.location.pathname === '/admin' || window.location.hash === '#/admin') {
     return <AdminPanel />
   }
   const [view, setView] = useState<'auth' | 'register' | 'confirm-email' | 'welcome' | 'location' | 'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support'>('auth');
