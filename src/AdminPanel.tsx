@@ -995,8 +995,13 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
     const allItems: any[] = orderData?.items ?? []
     const otherItemsTotal = allItems
       .filter((i: any) => !(i.name === item.name && i.chosen_label === item.chosen_label))
-      .reduce((s: number, i: any) => s + (Number(i.final_price ?? i.price) * (i.quantity ?? 1)), 0)
-    const newTotal = otherItemsTotal + finalPrice
+      .reduce((s: number, i: any) => {
+        const itemPrice = i.final_price !== null && i.final_price !== undefined
+          ? Number(i.final_price)
+          : Number(i.unit_price ?? i.price ?? 0)
+        return s + (itemPrice * (i.quantity ?? 1))
+      }, 0)
+    const newTotal = Math.round((otherItemsTotal + finalPrice) * 100) / 100
 
     const updatedItems = allItems.map((i: any) => 
       (i.name === item.name && i.chosen_label === item.chosen_label)
