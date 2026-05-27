@@ -901,7 +901,7 @@ function OrderDetail({ order, onAdvance, onClose, onRefresh }: {
           <div style={{ fontSize: '10px', fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--brand-red)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Scale size={12} /> Pesagem Pendente
           </div>
-          {items.filter(i => i.chosen_label).map((item: any, idx: number) => (
+          {items.filter(i => i.chosen_label && !i.real_grams).map((item: any, idx: number) => (
             <WeighingForm key={idx} orderId={order.id} item={item} onDone={onRefresh} />
           ))}
         </div>
@@ -974,11 +974,24 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
 
     const allItems: any[] = orderData?.items ?? []
     const otherItemsTotal = allItems
-      .filter((i: any) => !i.chosen_label)
-      .reduce((s: number, i: any) => s + (Number(i.price) * (i.quantity ?? 1)), 0)
+      .filter((i: any) => i.chosen_label !== item.chosen_label || i.name !== item.name)
+      .reduce((s: number, i: any) => s + (Number(i.final_price ?? i.price) * (i.quantity ?? 1)), 0)
     const newTotal = otherItemsTotal + finalPrice
 
-    await supabase.from('orders').update({ total: newTotal, status: 'weighing_done' }).eq('id', orderId)
+    const updatedItems = allItems.map((i: any) => 
+      (i.name === item.name && i.chosen_label === item.chosen_label)
+        ? { ...i, real_grams: parseInt(realGrams), final_price: finalPrice }
+        : i
+    )
+    const allWeighed = updatedItems.filter((i: any) => i.chosen_label).every((i: any) => i.real_grams)
+    const newStatus = allWeighed ? 'weighing_done' : 'awaiting_weighing'
+    
+    await supabase.from('orders').update({ 
+      total: newTotal, 
+      status: newStatus,
+      items: updatedItems
+    }).eq('id', orderId)
+    
     await supabase.from('order_notifications').insert({
       order_id: orderId,
       type: 'weight_update',
