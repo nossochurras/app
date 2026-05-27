@@ -1222,6 +1222,10 @@ function AwaitingWeighingScreen({
                   setNotification(data);
                   onWeighingNotify(orderCode);
                 }
+              });
+          }
+        }
+      )
       .subscribe();
 
     return () => { supabase.removeChannel(statusChannel); };
