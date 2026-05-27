@@ -3,12 +3,19 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   LayoutDashboard, ShoppingBag, UtensilsCrossed, Ticket, BarChart2,
-  LogOut, Bell, CheckCircle, Clock, Flame, ChevronRight, X,
-  Plus, Minus, Edit2, Trash2, Upload, Save, Toggle, Scale,
-  Camera, AlertCircle, TrendingUp, Users, DollarSign, Package,
-  ArrowLeft, Eye, RefreshCw, Search, Filter, ChevronDown,
-  Beef, Beer, Sandwich, ToggleLeft, ToggleRight, Image, Weight
+  LogOut, CheckCircle, Clock, ChevronRight, X,
+  Plus, Edit2, Trash2, Upload, Save,
+  Camera, TrendingUp, Users, DollarSign,
+  ArrowRight, Eye, RefreshCw, Search,
+  Scale, ToggleLeft, ToggleRight, Image, Flame
 } from 'lucide-react'
+
+// ─── BRAND TOKENS ────────────────────────────────────────────
+// Cores extraídas do Manual de Marca 2026
+// #b73527 — Vermelho principal (40% uso)
+// #1a0905 — Marrom escuro/quase preto (40% uso)
+// #c7ad70 — Dourado/Mostarda (10% uso)
+// #fff0de — Creme/Off-white (25% uso)
 
 // ─── TYPES ───────────────────────────────────────────────────
 
@@ -67,13 +74,13 @@ type Order = {
 // ─── STATUS CONFIG ────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; next: string | null }> = {
-  pending:           { label: 'Recebido',         color: '#f59e0b', bg: '#fef3c7', next: 'preparing' },
-  awaiting_weighing: { label: 'Aguard. Pesagem',  color: '#8b5cf6', bg: '#ede9fe', next: 'weighing_done' },
-  weighing_done:     { label: 'Pesagem OK',       color: '#06b6d4', bg: '#cffafe', next: 'preparing' },
-  preparing:         { label: 'Preparando',       color: '#3b82f6', bg: '#dbeafe', next: 'ready' },
-  ready:             { label: 'Pronto',           color: '#10b981', bg: '#d1fae5', next: 'delivered' },
-  delivered:         { label: 'Entregue',         color: '#6b7280', bg: '#f3f4f6', next: null },
-  cancelled:         { label: 'Cancelado',        color: '#ef4444', bg: '#fee2e2', next: null },
+  pending:           { label: 'Recebido',        color: '#c7ad70', bg: '#c7ad7022', next: 'preparing' },
+  awaiting_weighing: { label: 'Aguard. Pesagem', color: '#b73527', bg: '#b7352722', next: 'weighing_done' },
+  weighing_done:     { label: 'Pesagem OK',      color: '#c7ad70', bg: '#c7ad7022', next: 'preparing' },
+  preparing:         { label: 'Preparando',      color: '#fff0de', bg: '#fff0de22', next: 'ready' },
+  ready:             { label: 'Pronto!',         color: '#c7ad70', bg: '#c7ad7044', next: 'delivered' },
+  delivered:         { label: 'Entregue',        color: '#6b6b5e', bg: '#6b6b5e22', next: null },
+  cancelled:         { label: 'Cancelado',       color: '#b73527', bg: '#b7352722', next: null },
 }
 
 // ─── SOUND ───────────────────────────────────────────────────
@@ -98,6 +105,57 @@ function playNotificationSound() {
   } catch (e) {}
 }
 
+// ─── GLOBAL STYLES ────────────────────────────────────────────
+
+const globalStyle = `
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --brand-red: #b73527;
+    --brand-dark: #1a0905;
+    --brand-gold: #c7ad70;
+    --brand-cream: #fff0de;
+    --surface-1: #1f0e07;
+    --surface-2: #271208;
+    --surface-3: #311508;
+    --border-subtle: rgba(199,173,112,0.12);
+    --border-medium: rgba(199,173,112,0.22);
+    --text-primary: #fff0de;
+    --text-muted: rgba(255,240,222,0.5);
+    --text-dim: rgba(255,240,222,0.3);
+    --font-display: 'Barlow Condensed', sans-serif;
+    --font-body: 'Barlow', sans-serif;
+  }
+
+  body { background: var(--surface-1); color: var(--text-primary); font-family: var(--font-body); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 4px; }
+
+  /* Input reset */
+  input, textarea, select {
+    background: rgba(255,240,222,0.05);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus, textarea:focus, select:focus {
+    border-color: var(--brand-gold);
+  }
+  input::placeholder, textarea::placeholder {
+    color: var(--text-dim);
+  }
+  select option { background: var(--surface-2); }
+`
+
 // ─── MAIN ADMIN PANEL ────────────────────────────────────────
 
 export default function AdminPanel() {
@@ -116,7 +174,6 @@ export default function AdminPanel() {
     })
   }, [])
 
-  // Realtime: novo pedido
   useEffect(() => {
     const channel = supabase
       .channel('admin-orders')
@@ -129,94 +186,197 @@ export default function AdminPanel() {
   }, [])
 
   if (loading) return (
-    <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <Flame size={48} className="text-[#e85d26] animate-pulse" />
-        <p className="text-white/50 text-sm font-mono">carregando painel...</p>
+    <>
+      <style>{globalStyle}</style>
+      <div style={{
+        minHeight: '100vh', background: 'var(--surface-1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexDirection: 'column', gap: '20px'
+      }}>
+        <LogoMark size={56} />
+        <p style={{ color: 'var(--text-dim)', fontSize: '12px', fontFamily: 'var(--font-display)', letterSpacing: '3px', textTransform: 'uppercase' }}>
+          carregando painel...
+        </p>
       </div>
-    </div>
+    </>
   )
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white flex" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-[#161616] border-r border-white/5 flex flex-col shrink-0 sticky top-0 h-screen">
-        {/* Logo */}
-        <div className="p-6 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#e85d26] rounded-xl flex items-center justify-center">
-              <Flame size={18} className="text-white" />
-            </div>
-            <div>
-              <div className="font-semibold text-sm leading-none">Praça Admin</div>
-              <div className="text-[11px] text-white/30 mt-0.5">Painel de Controle</div>
-            </div>
+    <>
+      <style>{globalStyle}</style>
+      <div style={{ minHeight: '100vh', background: 'var(--surface-1)', display: 'flex' }}>
+        {/* SIDEBAR */}
+        <aside style={{
+          width: '220px', background: 'var(--surface-2)',
+          borderRight: '1px solid var(--border-subtle)',
+          display: 'flex', flexDirection: 'column',
+          position: 'sticky', top: 0, height: '100vh', flexShrink: 0
+        }}>
+          {/* Logo */}
+          <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <BrandLogo />
+            <p style={{
+              fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase',
+              color: 'var(--brand-gold)', fontFamily: 'var(--font-display)',
+              fontWeight: 600, marginTop: '8px', opacity: 0.8
+            }}>
+              Painel Admin
+            </p>
           </div>
-        </div>
 
-        {/* Nav */}
-        <nav className="flex-1 p-3 space-y-1">
-          {[
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-            { id: 'orders',    icon: ShoppingBag,     label: 'Pedidos', badge: newOrderCount > 0 ? newOrderCount : null },
-            { id: 'menu',      icon: UtensilsCrossed, label: 'Cardápio' },
-            { id: 'coupons',   icon: Ticket,          label: 'Cupons' },
-            { id: 'reports',   icon: BarChart2,       label: 'Relatórios' },
-          ].map(item => {
-            const Icon = item.icon
-            const active = activeTab === item.id
-            return (
-              <button
-                key={item.id}
-                onClick={() => { setActiveTab(item.id as any); if (item.id === 'orders') setNewOrderCount(0) }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  active ? 'bg-[#e85d26] text-white' : 'text-white/40 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Icon size={18} />
-                <span className="flex-1 text-left">{item.label}</span>
-                {item.badge && (
-                  <span className="bg-white text-[#e85d26] text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </nav>
+          {/* Nav */}
+          <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            {[
+              { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+              { id: 'orders',    icon: ShoppingBag,     label: 'Pedidos',   badge: newOrderCount > 0 ? newOrderCount : null },
+              { id: 'menu',      icon: UtensilsCrossed, label: 'Cardápio' },
+              { id: 'coupons',   icon: Ticket,          label: 'Cupons' },
+              { id: 'reports',   icon: BarChart2,       label: 'Relatórios' },
+            ].map(item => {
+              const Icon = item.icon
+              const active = activeTab === item.id
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => { setActiveTab(item.id as any); if (item.id === 'orders') setNewOrderCount(0) }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '10px 12px', borderRadius: '8px',
+                    border: active ? '1px solid rgba(183,53,39,0.4)' : '1px solid transparent',
+                    background: active ? 'rgba(183,53,39,0.15)' : 'transparent',
+                    color: active ? 'var(--brand-cream)' : 'var(--text-muted)',
+                    cursor: 'pointer', transition: 'all 0.15s',
+                    fontFamily: 'var(--font-display)', fontWeight: 600,
+                    fontSize: '14px', letterSpacing: '0.5px',
+                    textAlign: 'left', width: '100%',
+                  }}
+                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'var(--brand-cream)' }}
+                  onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)' }}
+                >
+                  <Icon size={16} style={{ color: active ? 'var(--brand-red)' : 'inherit', flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.badge && (
+                    <span style={{
+                      background: 'var(--brand-red)', color: 'var(--brand-cream)',
+                      fontSize: '10px', fontWeight: 700,
+                      width: '18px', height: '18px', borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </nav>
 
-        {/* User */}
-        <div className="p-4 border-t border-white/5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 bg-[#e85d26]/20 rounded-full flex items-center justify-center text-xs font-bold text-[#e85d26]">
-              {profile?.full_name?.[0]?.toUpperCase() ?? 'A'}
+          {/* Decorative divider */}
+          <div style={{
+            margin: '0 16px', height: '1px',
+            background: 'linear-gradient(90deg, transparent, var(--brand-gold), transparent)',
+            opacity: 0.3
+          }} />
+
+          {/* User */}
+          <div style={{ padding: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+              <div style={{
+                width: '32px', height: '32px', borderRadius: '50%',
+                background: 'rgba(183,53,39,0.2)', border: '1px solid rgba(183,53,39,0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '12px', fontWeight: 700, color: 'var(--brand-red)',
+                fontFamily: 'var(--font-display)'
+              }}>
+                {profile?.full_name?.[0]?.toUpperCase() ?? 'A'}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {profile?.full_name ?? 'Admin'}
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '1px', textTransform: 'uppercase' }}>Administrador</div>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium truncate">{profile?.full_name ?? 'Admin'}</div>
-              <div className="text-[10px] text-white/30">Administrador</div>
-            </div>
+            <button
+              onClick={() => supabase.auth.signOut().then(() => window.location.href = '/')}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '8px 10px', borderRadius: '6px', border: '1px solid transparent',
+                background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer',
+                fontSize: '12px', fontFamily: 'var(--font-body)', transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = 'var(--brand-red)'; b.style.background = 'rgba(183,53,39,0.08)' }}
+              onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = 'var(--text-dim)'; b.style.background = 'transparent' }}
+            >
+              <LogOut size={13} /> Sair
+            </button>
           </div>
-          <button
-            onClick={() => supabase.auth.signOut().then(() => window.location.href = '/')}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-white/30 hover:text-red-400 hover:bg-red-400/5 transition"
-          >
-            <LogOut size={14} /> Sair
-          </button>
-        </div>
-      </aside>
+        </aside>
 
-      {/* MAIN */}
-      <main className="flex-1 overflow-y-auto">
-        <AnimatePresence mode="wait">
-          {activeTab === 'dashboard' && <DashboardTab key="dashboard" onNavigate={setActiveTab} />}
-          {activeTab === 'orders'    && <OrdersTab    key="orders" />}
-          {activeTab === 'menu'      && <MenuTab      key="menu" />}
-          {activeTab === 'coupons'   && <CouponsTab   key="coupons" />}
-          {activeTab === 'reports'   && <ReportsTab   key="reports" />}
-        </AnimatePresence>
-      </main>
+        {/* MAIN */}
+        <main style={{ flex: 1, overflowY: 'auto' }}>
+          <AnimatePresence mode="wait">
+            {activeTab === 'dashboard' && <DashboardTab key="dashboard" onNavigate={setActiveTab} />}
+            {activeTab === 'orders'    && <OrdersTab    key="orders" />}
+            {activeTab === 'menu'      && <MenuTab      key="menu" />}
+            {activeTab === 'coupons'   && <CouponsTab   key="coupons" />}
+            {activeTab === 'reports'   && <ReportsTab   key="reports" />}
+          </AnimatePresence>
+        </main>
+      </div>
+    </>
+  )
+}
+
+// ─── BRAND COMPONENTS ─────────────────────────────────────────
+
+function LogoMark({ size = 40 }: { size?: number }) {
+  return (
+    <div style={{
+      width: size, height: size,
+      background: 'var(--brand-red)',
+      borderRadius: '10px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      position: 'relative', overflow: 'hidden'
+    }}>
+      <Flame size={size * 0.45} color="var(--brand-cream)" />
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        height: '3px', background: 'var(--brand-gold)'
+      }} />
+    </div>
+  )
+}
+
+function BrandLogo() {
+  return (
+    <div>
+      <div style={{ fontSize: '9px', fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '4px', color: 'var(--brand-gold)', textTransform: 'uppercase' }}>
+        Praça
+      </div>
+      <div style={{ fontSize: '22px', fontFamily: 'var(--font-display)', fontWeight: 800, color: 'var(--brand-red)', lineHeight: 1, textTransform: 'uppercase', letterSpacing: '-0.5px' }}>
+        Nosso<br />Churras
+      </div>
+      <div style={{
+        display: 'inline-block', marginTop: '3px',
+        background: 'var(--brand-red)', padding: '1px 6px',
+        fontSize: '8px', fontFamily: 'var(--font-display)', fontWeight: 700,
+        letterSpacing: '3px', color: 'var(--brand-cream)', textTransform: 'uppercase'
+      }}>
+        Gastrobar
+      </div>
+    </div>
+  )
+}
+
+// Divisor com estrelas (elemento gráfico do manual)
+function StarDivider() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
+      <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
+      {'★★★★★'.split('').map((s, i) => (
+        <span key={i} style={{ color: 'var(--brand-gold)', fontSize: '8px', opacity: i < 3 ? 1 : 0.35 }}>{s}</span>
+      ))}
+      <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
     </div>
   )
 }
@@ -226,16 +386,27 @@ export default function AdminPanel() {
 function Page({ title, subtitle, children, action }: any) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2 }}
-      className="p-8"
+      style={{ padding: '32px' }}
     >
-      <div className="flex items-center justify-between mb-8">
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '28px' }}>
         <div>
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          {subtitle && <p className="text-white/40 text-sm mt-1">{subtitle}</p>}
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontWeight: 800,
+            fontSize: '32px', textTransform: 'uppercase', letterSpacing: '1px',
+            color: 'var(--text-primary)', lineHeight: 1
+          }}>
+            {title}
+          </h1>
+          {subtitle && (
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '6px', fontFamily: 'var(--font-body)' }}>
+              {subtitle}
+            </p>
+          )}
+          <StarDivider />
         </div>
         {action}
       </div>
@@ -246,17 +417,121 @@ function Page({ title, subtitle, children, action }: any) {
 
 // ─── STAT CARD ────────────────────────────────────────────────
 
-function StatCard({ icon: Icon, label, value, sub, color = '#e85d26' }: any) {
+function StatCard({ icon: Icon, label, value, color = 'var(--brand-red)' }: any) {
   return (
-    <div className="bg-[#161616] border border-white/5 rounded-2xl p-5">
-      <div className="flex items-start justify-between mb-4">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: color + '20' }}>
-          <Icon size={20} style={{ color }} />
+    <div style={{
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: '12px', padding: '20px',
+      borderTop: `3px solid ${color}`,
+      position: 'relative', overflow: 'hidden'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <div style={{
+          width: '36px', height: '36px', borderRadius: '8px',
+          background: `${color}18`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <Icon size={18} style={{ color }} />
         </div>
       </div>
-      <div className="text-2xl font-semibold mb-1">{value}</div>
-      <div className="text-xs text-white/40">{label}</div>
-      {sub && <div className="text-xs text-white/25 mt-0.5">{sub}</div>}
+      <div style={{
+        fontSize: '26px', fontWeight: 800, fontFamily: 'var(--font-display)',
+        color: 'var(--text-primary)', letterSpacing: '-0.5px'
+      }}>
+        {value}
+      </div>
+      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>
+        {label}
+      </div>
+      {/* decorative corner element */}
+      <div style={{
+        position: 'absolute', bottom: '-8px', right: '-8px',
+        width: '48px', height: '48px', borderRadius: '50%',
+        background: `${color}08`
+      }} />
+    </div>
+  )
+}
+
+// ─── GOLD BUTTON ─────────────────────────────────────────────
+
+function GoldButton({ children, onClick, disabled, small }: { children: any; onClick?: () => void; disabled?: boolean; small?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: small ? '8px 16px' : '10px 20px',
+        background: disabled ? 'rgba(183,53,39,0.2)' : 'var(--brand-red)',
+        border: '1px solid',
+        borderColor: disabled ? 'rgba(183,53,39,0.2)' : 'var(--brand-red)',
+        borderRadius: '8px', color: 'var(--brand-cream)',
+        fontFamily: 'var(--font-display)', fontWeight: 700,
+        fontSize: small ? '12px' : '13px', letterSpacing: '1px', textTransform: 'uppercase',
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+        transition: 'all 0.15s'
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ─── GHOST BUTTON ────────────────────────────────────────────
+
+function GhostButton({ children, onClick, small }: { children: any; onClick?: () => void; small?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        padding: small ? '7px 14px' : '9px 18px',
+        background: 'transparent',
+        border: '1px solid var(--border-medium)',
+        borderRadius: '8px', color: 'var(--text-muted)',
+        fontFamily: 'var(--font-display)', fontWeight: 600,
+        fontSize: small ? '12px' : '13px', letterSpacing: '0.5px',
+        cursor: 'pointer', transition: 'all 0.15s'
+      }}
+      onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = 'var(--text-primary)'; b.style.borderColor = 'var(--brand-gold)' }}
+      onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = 'var(--text-muted)'; b.style.borderColor = 'var(--border-medium)' }}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ─── STATUS BADGE ─────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '5px',
+      padding: '3px 10px', borderRadius: '20px', fontSize: '10px',
+      fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', textTransform: 'uppercase',
+      color: cfg.color, background: cfg.bg,
+      border: `1px solid ${cfg.color}30`
+    }}>
+      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
+      {cfg.label}
+    </span>
+  )
+}
+
+// ─── SECTION CARD ────────────────────────────────────────────
+
+function SectionCard({ children, style: extraStyle }: { children: any; style?: React.CSSProperties }) {
+  return (
+    <div style={{
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: '14px', overflow: 'hidden',
+      ...extraStyle
+    }}>
+      {children}
     </div>
   )
 }
@@ -285,45 +560,71 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: any) => void }) {
   }, [])
 
   return (
-    <Page title="Dashboard" subtitle={`Hoje, ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}`}>
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <StatCard icon={ShoppingBag}  label="Pedidos hoje"     value={stats.orders}                                      color="#e85d26" />
-        <StatCard icon={DollarSign}   label="Faturamento hoje" value={`R$ ${stats.revenue.toFixed(2).replace('.',',')}`} color="#10b981" />
-        <StatCard icon={Clock}        label="Em andamento"     value={stats.pending}                                     color="#f59e0b" />
-        <StatCard icon={Users}        label="Clientes hoje"    value={stats.customers}                                   color="#8b5cf6" />
+    <Page
+      title="Dashboard"
+      subtitle={`NOSSO churrasco • ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
+        <StatCard icon={ShoppingBag}  label="Pedidos hoje"     value={stats.orders}                                            color="var(--brand-red)" />
+        <StatCard icon={DollarSign}   label="Faturamento hoje" value={`R$ ${stats.revenue.toFixed(2).replace('.',',')}`}       color="var(--brand-gold)" />
+        <StatCard icon={Clock}        label="Em andamento"     value={stats.pending}                                           color="#c7ad70" />
+        <StatCard icon={Users}        label="Clientes hoje"    value={stats.customers}                                         color="var(--brand-red)" />
       </div>
 
-      <div className="bg-[#161616] border border-white/5 rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
-          <h2 className="font-medium text-sm">Pedidos Recentes</h2>
-          <button onClick={() => onNavigate('orders')} className="text-[#e85d26] text-xs font-medium hover:underline flex items-center gap-1">
-            Ver todos <ChevronRight size={14} />
+      <SectionCard>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px',
+          borderBottom: '1px solid var(--border-subtle)'
+        }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '16px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-primary)' }}>
+            Pedidos Recentes
+          </h2>
+          <button
+            onClick={() => onNavigate('orders')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              background: 'transparent', border: 'none',
+              color: 'var(--brand-gold)', fontSize: '11px', fontWeight: 700,
+              fontFamily: 'var(--font-display)', letterSpacing: '1px', textTransform: 'uppercase',
+              cursor: 'pointer', opacity: 0.8, transition: 'opacity 0.15s'
+            }}
+          >
+            Ver todos <ChevronRight size={13} />
           </button>
         </div>
-        <div className="divide-y divide-white/5">
+        <div>
           {recentOrders.length === 0 && (
-            <div className="py-12 text-center text-white/25 text-sm">Nenhum pedido ainda hoje</div>
+            <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
+              A brasa ainda está acendendo... nenhum pedido hoje.
+            </div>
           )}
-          {recentOrders.map(order => {
-            const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
-            return (
-              <div key={order.id} className="flex items-center gap-4 px-6 py-4">
-                <div className="font-mono text-sm text-white/50">#{order.order_code}</div>
-                <div className="flex-1">
-                  <div className="text-sm font-medium">{order.location}</div>
-                  <div className="text-xs text-white/30">
-                    {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-                <div className="text-sm font-medium">R$ {Number(order.total).toFixed(2).replace('.',',')}</div>
-                <div className="text-xs font-medium px-2.5 py-1 rounded-full" style={{ color: cfg.color, background: cfg.bg + '33' }}>
-                  {cfg.label}
+          {recentOrders.map((order, i) => (
+            <div
+              key={order.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '16px',
+                padding: '14px 20px',
+                borderBottom: i < recentOrders.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+              }}
+            >
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', color: 'var(--brand-gold)', fontWeight: 700, width: '56px' }}>
+                #{order.order_code}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{order.location}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '1px' }}>
+                  {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
-            )
-          })}
+              <div style={{ fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--brand-gold)' }}>
+                R$ {Number(order.total).toFixed(2).replace('.',',')}
+              </div>
+              <StatusBadge status={order.status} />
+            </div>
+          ))}
         </div>
-      </div>
+      </SectionCard>
     </Page>
   )
 }
@@ -350,7 +651,6 @@ function OrdersTab() {
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
-  // Realtime
   useEffect(() => {
     const channel = supabase
       .channel('orders-list')
@@ -374,32 +674,39 @@ function OrdersTab() {
   }
 
   return (
-    <Page title="Pedidos" subtitle="Gerencie e acompanhe todos os pedidos em tempo real"
+    <Page
+      title="Pedidos"
+      subtitle="A vida acontece ao redor do fogo — acompanhe em tempo real"
       action={
-        <button onClick={fetchOrders} className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl text-sm hover:bg-white/10 transition">
-          <RefreshCw size={14} /> Atualizar
-        </button>
+        <GhostButton onClick={fetchOrders} small>
+          <RefreshCw size={13} /> Atualizar
+        </GhostButton>
       }
     >
       {/* Filters */}
-      <div className="flex gap-3 mb-6 flex-wrap">
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar pedido..."
-            className="bg-[#161616] border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-[#e85d26]/50 w-48"
+            style={{ padding: '8px 12px 8px 30px', width: '180px', fontSize: '12px' }}
           />
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {[['all','Todos'], ...Object.entries(STATUS_CONFIG).map(([k,v]) => [k, v.label])].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setFilterStatus(key)}
-              className={`px-3 py-2 rounded-xl text-xs font-medium transition ${
-                filterStatus === key ? 'bg-[#e85d26] text-white' : 'bg-[#161616] text-white/40 border border-white/5 hover:text-white'
-              }`}
+              style={{
+                padding: '7px 14px', borderRadius: '20px', fontSize: '11px',
+                fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px',
+                cursor: 'pointer', transition: 'all 0.15s', textTransform: 'uppercase',
+                background: filterStatus === key ? 'var(--brand-red)' : 'var(--surface-2)',
+                border: filterStatus === key ? '1px solid var(--brand-red)' : '1px solid var(--border-subtle)',
+                color: filterStatus === key ? 'var(--brand-cream)' : 'var(--text-muted)'
+              }}
             >
               {label}
             </button>
@@ -407,42 +714,54 @@ function OrdersTab() {
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '20px' }}>
         {/* List */}
-        <div className="col-span-3 space-y-2">
-          {loading && <div className="text-center py-12 text-white/30 text-sm">Carregando...</div>}
-          {!loading && filtered.length === 0 && <div className="text-center py-12 text-white/30 text-sm">Nenhum pedido encontrado</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>
+              Carregando pedidos...
+            </div>
+          )}
+          {!loading && filtered.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>
+              Nenhum pedido encontrado.
+            </div>
+          )}
           {filtered.map(order => {
-            const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
             const isSelected = selected?.id === order.id
-            // Check if has weight items in JSONB items array
             const hasWeightItems = Array.isArray(order.items) && order.items.some((i: any) => i.weight_option_id || i.chosen_label)
             return (
               <motion.div
                 key={order.id}
                 layout
                 onClick={() => setSelected(isSelected ? null : order)}
-                className={`bg-[#161616] border rounded-2xl p-4 cursor-pointer transition-all ${
-                  isSelected ? 'border-[#e85d26]/50 bg-[#e85d26]/5' : 'border-white/5 hover:border-white/10'
-                }`}
+                style={{
+                  background: isSelected ? 'rgba(183,53,39,0.08)' : 'var(--surface-2)',
+                  border: `1px solid ${isSelected ? 'rgba(183,53,39,0.4)' : 'var(--border-subtle)'}`,
+                  borderRadius: '12px', padding: '14px 18px',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', gap: '14px'
+                }}
               >
-                <div className="flex items-center gap-3">
-                  <div className="font-mono text-sm text-white/50 w-16">#{order.order_code}</div>
-                  <div className="flex-1">
-                    <div className="text-sm font-medium flex items-center gap-2">
-                      {order.location}
-                      {hasWeightItems && <Scale size={12} className="text-purple-400" />}
-                    </div>
-                    <div className="text-xs text-white/30 mt-0.5">
-                      {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} •{' '}
-                      {order.payment_type === 'app' ? 'App' : 'Local'}
-                    </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', color: 'var(--brand-gold)', fontWeight: 700, width: '56px', flexShrink: 0 }}>
+                  #{order.order_code}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {order.location}
+                    {hasWeightItems && <Scale size={11} style={{ color: 'var(--brand-gold)' }} />}
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-semibold">R$ {Number(order.total).toFixed(2).replace('.',',')}</div>
-                    <div className="text-[10px] font-medium px-2 py-0.5 rounded-full mt-1 inline-block" style={{ color: cfg.color, background: cfg.bg + '33' }}>
-                      {cfg.label}
-                    </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                    {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} •{' '}
+                    {order.payment_type === 'app' ? 'Pago no App' : 'Pagamento Local'}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'var(--font-display)', color: 'var(--brand-gold)' }}>
+                    R$ {Number(order.total).toFixed(2).replace('.',',')}
+                  </div>
+                  <div style={{ marginTop: '4px' }}>
+                    <StatusBadge status={order.status} />
                   </div>
                 </div>
               </motion.div>
@@ -451,7 +770,7 @@ function OrdersTab() {
         </div>
 
         {/* Detail Panel */}
-        <div className="col-span-2">
+        <div>
           <AnimatePresence>
             {selected ? (
               <OrderDetail key={selected.id} order={selected} onAdvance={advanceStatus} onClose={() => setSelected(null)} onRefresh={fetchOrders} />
@@ -459,10 +778,17 @@ function OrdersTab() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="bg-[#161616] border border-white/5 rounded-2xl h-64 flex flex-col items-center justify-center text-white/20 text-sm gap-3"
+                style={{
+                  background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+                  borderRadius: '14px', height: '200px',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  gap: '10px', color: 'var(--text-dim)'
+                }}
               >
-                <Eye size={32} className="opacity-30" />
-                Selecione um pedido para ver detalhes
+                <Eye size={28} style={{ opacity: 0.3 }} />
+                <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: 'var(--font-display)' }}>
+                  Selecione um pedido
+                </span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -474,75 +800,104 @@ function OrdersTab() {
 
 // ─── ORDER DETAIL ─────────────────────────────────────────────
 
-function OrderDetail({ order, onAdvance, onClose, onRefresh }: { order: Order; onAdvance: (o: Order) => void; onClose: () => void; onRefresh: () => void }) {
+function OrderDetail({ order, onAdvance, onClose, onRefresh }: {
+  order: Order; onAdvance: (o: Order) => void; onClose: () => void; onRefresh: () => void
+}) {
   const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
   const nextCfg = cfg.next ? STATUS_CONFIG[cfg.next] : null
-  const [weighingItem, setWeighingItem] = useState<any | null>(null)
-
-  // items may come from JSONB column
   const items: any[] = Array.isArray(order.items) ? order.items : []
   const hasWeightItems = items.some(i => i.weight_mode || i.chosen_label)
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 20 }}
+      initial={{ opacity: 0, x: 16 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 20 }}
-      className="bg-[#161616] border border-white/5 rounded-2xl overflow-hidden sticky top-8"
+      exit={{ opacity: 0, x: 16 }}
+      style={{
+        background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+        borderRadius: '14px', overflow: 'hidden', position: 'sticky', top: '20px'
+      }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '16px 18px', borderBottom: '1px solid var(--border-subtle)',
+        background: 'rgba(183,53,39,0.06)'
+      }}>
         <div>
-          <div className="font-mono text-sm text-white/50">#{order.order_code}</div>
-          <div className="font-medium">{order.location}</div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '12px', color: 'var(--brand-gold)', fontWeight: 700, letterSpacing: '2px' }}>
+            #{order.order_code}
+          </div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+            {order.location}
+          </div>
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-white transition">
-          <X size={16} />
+        <button
+          onClick={onClose}
+          style={{
+            background: 'transparent', border: '1px solid var(--border-subtle)',
+            borderRadius: '6px', padding: '4px', cursor: 'pointer',
+            color: 'var(--text-dim)', display: 'flex', alignItems: 'center', transition: 'all 0.15s'
+          }}
+        >
+          <X size={14} />
         </button>
       </div>
 
       {/* Status */}
-      <div className="px-5 py-4 border-b border-white/5">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-2 h-2 rounded-full" style={{ background: cfg.color }}></div>
-          <span className="text-sm font-medium" style={{ color: cfg.color }}>{cfg.label}</span>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Status:</span>
+          <StatusBadge status={order.status} />
         </div>
         {nextCfg && (
           <button
             onClick={() => onAdvance(order)}
-            className="w-full py-2.5 rounded-xl text-sm font-medium transition"
-            style={{ background: cfg.color + '20', color: cfg.color, border: `1px solid ${cfg.color}40` }}
+            style={{
+              width: '100%', padding: '10px', borderRadius: '8px',
+              background: `${cfg.color}15`, border: `1px solid ${cfg.color}40`,
+              color: cfg.color, cursor: 'pointer',
+              fontFamily: 'var(--font-display)', fontWeight: 700,
+              fontSize: '13px', letterSpacing: '0.5px', textTransform: 'uppercase',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+              transition: 'all 0.15s'
+            }}
           >
-            Avançar → {nextCfg.label}
+            Avançar <ArrowRight size={14} /> {nextCfg.label}
           </button>
         )}
       </div>
 
       {/* Items */}
-      <div className="px-5 py-4 border-b border-white/5 space-y-3 max-h-56 overflow-y-auto">
-        {items.map((item: any, i: number) => (
-          <div key={i} className="flex items-start justify-between gap-2">
-            <div className="flex-1">
-              <div className="text-sm font-medium">{item.name}</div>
-              {item.chosen_label && (
-                <div className="text-xs text-purple-400 mt-0.5 flex items-center gap-1">
-                  <Scale size={10} /> {item.chosen_label}
-                  {item.real_grams && <span className="text-green-400 ml-1">→ {item.real_grams}g</span>}
-                </div>
-              )}
-              <div className="text-xs text-white/30">x{item.quantity}</div>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)', maxHeight: '220px', overflowY: 'auto' }}>
+        <div style={{ fontSize: '10px', fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--brand-gold)', marginBottom: '10px' }}>
+          Itens do Pedido
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {items.map((item: any, i: number) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{item.name}</div>
+                {item.chosen_label && (
+                  <div style={{ fontSize: '11px', color: 'var(--brand-gold)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Scale size={9} /> {item.chosen_label}
+                    {item.real_grams && <span style={{ color: '#5dba75' }}>→ {item.real_grams}g</span>}
+                  </div>
+                )}
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>x{item.quantity}</div>
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--brand-gold)', flexShrink: 0 }}>
+                R$ {(Number(item.final_price ?? item.price) * item.quantity).toFixed(2).replace('.',',')}
+              </div>
             </div>
-            <div className="text-sm font-medium">
-              R$ {(Number(item.final_price ?? item.price) * item.quantity).toFixed(2).replace('.',',')}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* Weighing section */}
       {hasWeightItems && order.status === 'awaiting_weighing' && (
-        <div className="px-5 py-4 border-b border-white/5">
-          <div className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(183,53,39,0.05)' }}>
+          <div style={{ fontSize: '10px', fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--brand-red)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Scale size={12} /> Pesagem Pendente
           </div>
           {items.filter(i => i.chosen_label).map((item: any, idx: number) => (
@@ -552,9 +907,14 @@ function OrderDetail({ order, onAdvance, onClose, onRefresh }: { order: Order; o
       )}
 
       {/* Total */}
-      <div className="px-5 py-4 flex items-center justify-between">
-        <span className="text-sm text-white/50">Total</span>
-        <span className="font-semibold text-lg">R$ {Number(order.total).toFixed(2).replace('.',',')}</span>
+      <div style={{
+        padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: 'rgba(199,173,112,0.06)'
+      }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Total</span>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 800, color: 'var(--brand-gold)' }}>
+          R$ {Number(order.total).toFixed(2).replace('.',',')}
+        </span>
       </div>
     </motion.div>
   )
@@ -581,8 +941,7 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
   const discount = unitPrice - calcFinal()
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (!f) return
+    const f = e.target.files?.[0]; if (!f) return
     setPhoto(f)
     setPhotoPreview(URL.createObjectURL(f))
   }
@@ -591,7 +950,7 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
     if (!realGrams) return
     setSaving(true)
     let photoUrl: string | null = null
-  
+
     if (photo) {
       const ext = photo.name.split('.').pop()
       const path = `balanca/${orderId}_${Date.now()}.${ext}`
@@ -599,39 +958,26 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
         .from('churras-media')
         .upload(path, photo, { upsert: true })
       if (uploadData) {
-        const { data: urlData } = supabase.storage
-          .from('churras-media')
-          .getPublicUrl(path)
+        const { data: urlData } = supabase.storage.from('churras-media').getPublicUrl(path)
         photoUrl = urlData.publicUrl
       }
     }
-  
+
     const finalPrice = calcFinal()
-  
-    // Busca pedido completo para recalcular total
+
     const { data: orderData } = await supabase
       .from('orders')
       .select('items, total')
       .eq('id', orderId)
       .single()
-  
-    // Recalcula total: itens sem pesagem + valor real da carne
+
     const allItems: any[] = orderData?.items ?? []
     const otherItemsTotal = allItems
       .filter((i: any) => !i.chosen_label)
       .reduce((s: number, i: any) => s + (Number(i.price) * (i.quantity ?? 1)), 0)
     const newTotal = otherItemsTotal + finalPrice
-  
-    // Atualiza total e status do pedido
-    await supabase
-      .from('orders')
-      .update({
-        total: newTotal,
-        status: 'weighing_done',
-      })
-      .eq('id', orderId)
-  
-    // Envia notificação para o cliente com foto, peso e total atualizado
+
+    await supabase.from('orders').update({ total: newTotal, status: 'weighing_done' }).eq('id', orderId)
     await supabase.from('order_notifications').insert({
       order_id: orderId,
       type: 'weight_update',
@@ -641,61 +987,87 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
       final_price: finalPrice,
       order_total: newTotal,
     })
-  
+
     setSaving(false)
     onDone()
   }
 
   return (
-    <div className="bg-purple-950/30 border border-purple-500/20 rounded-xl p-4 mb-3">
-      <div className="text-sm font-medium mb-1">{item.name}</div>
-      <div className="text-xs text-white/40 mb-3">Faixa: {item.chosen_label} (até {maxGrams}g) • R$ {Number(unitPrice).toFixed(2).replace('.',',')}</div>
-
-      <div className="flex gap-2 mb-3">
-        <div className="flex-1">
-          <label className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">Peso real (g)</label>
+    <div style={{
+      background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.25)',
+      borderRadius: '10px', padding: '14px', marginBottom: '10px'
+    }}>
+      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>{item.name}</div>
+      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '10px' }}>
+        Faixa: {item.chosen_label} (até {maxGrams}g) • R$ {Number(unitPrice).toFixed(2).replace('.',',')}
+      </div>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'flex-end' }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>
+            Peso real (g)
+          </label>
           <input
             type="number"
             value={realGrams}
             onChange={e => setRealGrams(e.target.value)}
             placeholder="ex: 1050"
-            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-400/50 text-white placeholder:text-white/20"
+            style={{ width: '100%', padding: '8px 10px' }}
           />
         </div>
         {realGrams && (
-          <div className="text-right">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Valor final</div>
-            <div className="text-sm font-semibold text-green-400">R$ {calcFinal().toFixed(2).replace('.',',')}</div>
-            {discount > 0 && <div className="text-[10px] text-red-400">-R$ {discount.toFixed(2).replace('.',',')}</div>}
+          <div style={{ textAlign: 'right', paddingBottom: '2px' }}>
+            <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Final</div>
+            <div style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'var(--font-display)', color: 'var(--brand-gold)' }}>
+              R$ {calcFinal().toFixed(2).replace('.',',')}
+            </div>
+            {discount > 0 && (
+              <div style={{ fontSize: '10px', color: '#e05050' }}>-R$ {discount.toFixed(2).replace('.',',')}</div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Photo upload */}
       <div
         onClick={() => fileRef.current?.click()}
-        className="border border-dashed border-white/10 rounded-lg p-3 flex items-center gap-3 cursor-pointer hover:border-purple-400/40 transition mb-3"
+        style={{
+          border: '1px dashed var(--border-medium)', borderRadius: '8px',
+          padding: '10px', display: 'flex', alignItems: 'center', gap: '10px',
+          cursor: 'pointer', marginBottom: '10px', transition: 'border-color 0.15s'
+        }}
       >
         {photoPreview ? (
-          <img src={photoPreview} className="w-14 h-14 rounded-lg object-cover" />
+          <img src={photoPreview} style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }} />
         ) : (
-          <div className="w-14 h-14 bg-white/5 rounded-lg flex items-center justify-center">
-            <Camera size={20} className="text-white/20" />
+          <div style={{
+            width: '48px', height: '48px', background: 'rgba(255,240,222,0.05)',
+            borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <Camera size={18} style={{ color: 'var(--text-dim)' }} />
           </div>
         )}
         <div>
-          <div className="text-xs font-medium text-white/60">Foto da balança</div>
-          <div className="text-[10px] text-white/30">Clique para adicionar</div>
+          <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}>Foto da balança</div>
+          <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>Clique para adicionar</div>
         </div>
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handlePhoto} style={{ display: 'none' }} />
       </div>
 
       <button
         onClick={handleSave}
         disabled={!realGrams || saving}
-        className="w-full py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition flex items-center justify-center gap-2"
+        style={{
+          width: '100%', padding: '9px',
+          background: !realGrams || saving ? 'rgba(183,53,39,0.2)' : 'var(--brand-red)',
+          border: '1px solid rgba(183,53,39,0.5)',
+          borderRadius: '8px', color: 'var(--brand-cream)',
+          fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '12px',
+          letterSpacing: '1px', textTransform: 'uppercase',
+          cursor: !realGrams || saving ? 'not-allowed' : 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+          opacity: !realGrams || saving ? 0.5 : 1, transition: 'all 0.15s'
+        }}
       >
-        {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+        {saving ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />}
         {saving ? 'Salvando...' : 'Confirmar Pesagem'}
       </button>
     </div>
@@ -711,27 +1083,24 @@ function MenuTab() {
   const [loading, setLoading] = useState(true)
   const [filterCat, setFilterCat] = useState('Todos')
 
-  const fetch = async () => {
+  const fetchMenu = async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('menu_items')
-      .select('*, weight_options(*)')
-      .order('sort_order')
+    const { data } = await supabase.from('menu_items').select('*, weight_options(*)').order('sort_order')
     setItems(data ?? [])
     setLoading(false)
   }
 
-  useEffect(() => { fetch() }, [])
+  useEffect(() => { fetchMenu() }, [])
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este item?')) return
+    if (!confirm('Remover este item do cardápio?')) return
     await supabase.from('menu_items').delete().eq('id', id)
-    fetch()
+    fetchMenu()
   }
 
   const handleToggleAvailable = async (item: MenuItem) => {
     await supabase.from('menu_items').update({ available: !item.available }).eq('id', item.id)
-    fetch()
+    fetchMenu()
   }
 
   const handleNew = () => {
@@ -743,79 +1112,137 @@ function MenuTab() {
     setIsNew(true)
   }
 
-  const filtered = filterCat === 'Todos' ? items : items.filter(i => i.category === filterCat)
-
   const CATS = ['Todos', 'Carnes', 'Acompanhamentos', 'Bebidas']
+  const filtered = filterCat === 'Todos' ? items : items.filter(i => i.category === filterCat)
 
   return (
     <Page
       title="Cardápio"
-      subtitle="Gerencie itens, preços, faixas de peso e disponibilidade"
+      subtitle="NOSSO sabor, SEU ponto de encontro"
       action={
-        <button onClick={handleNew} className="flex items-center gap-2 px-4 py-2 bg-[#e85d26] rounded-xl text-sm font-medium hover:bg-[#d44f1e] transition">
-          <Plus size={16} /> Novo Item
-        </button>
+        <GoldButton onClick={handleNew}>
+          <Plus size={14} /> Novo Item
+        </GoldButton>
       }
     >
       {/* Category filter */}
-      <div className="flex gap-2 mb-6">
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
         {CATS.map(c => (
-          <button key={c} onClick={() => setFilterCat(c)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${filterCat === c ? 'bg-[#e85d26] text-white' : 'bg-[#161616] text-white/40 border border-white/5 hover:text-white'}`}>
+          <button
+            key={c}
+            onClick={() => setFilterCat(c)}
+            style={{
+              padding: '8px 18px', borderRadius: '20px', fontSize: '12px',
+              fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '1px', textTransform: 'uppercase',
+              cursor: 'pointer', transition: 'all 0.15s',
+              background: filterCat === c ? 'var(--brand-red)' : 'var(--surface-2)',
+              border: filterCat === c ? '1px solid var(--brand-red)' : '1px solid var(--border-subtle)',
+              color: filterCat === c ? 'var(--brand-cream)' : 'var(--text-muted)'
+            }}
+          >
             {c}
           </button>
         ))}
       </div>
 
-      {loading && <div className="text-center py-12 text-white/30">Carregando...</div>}
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>
+          Carregando cardápio...
+        </div>
+      )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
         {filtered.map(item => (
-          <div key={item.id} className={`bg-[#161616] border rounded-2xl overflow-hidden transition ${item.available ? 'border-white/5' : 'border-white/5 opacity-50'}`}>
-            <div className="h-36 relative bg-[#1a1a1a]">
+          <div
+            key={item.id}
+            style={{
+              background: 'var(--surface-2)',
+              border: `1px solid ${item.available ? 'var(--border-subtle)' : 'rgba(255,240,222,0.04)'}`,
+              borderRadius: '14px', overflow: 'hidden',
+              opacity: item.available ? 1 : 0.55, transition: 'opacity 0.2s'
+            }}
+          >
+            <div style={{ height: '140px', position: 'relative', background: 'var(--surface-3)' }}>
               {item.image_url ? (
-                <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-white/10">
-                  <Image size={32} />
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Image size={28} style={{ color: 'var(--text-dim)' }} />
                 </div>
               )}
-              <div className="absolute top-2 right-2 flex gap-1">
+              {/* Overlay badges */}
+              <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '4px' }}>
                 {item.weight_mode && (
-                  <div className="bg-purple-600/90 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
-                    <Scale size={10} /> Pesagem
-                  </div>
+                  <span style={{
+                    background: 'rgba(183,53,39,0.9)', color: 'var(--brand-cream)',
+                    fontSize: '9px', fontWeight: 700, fontFamily: 'var(--font-display)',
+                    padding: '3px 8px', borderRadius: '20px',
+                    display: 'flex', alignItems: 'center', gap: '3px', letterSpacing: '0.5px', textTransform: 'uppercase'
+                  }}>
+                    <Scale size={9} /> Pesagem
+                  </span>
                 )}
-                <div className={`text-[10px] font-bold px-2 py-1 rounded-full ${item.available ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white'}`}>
+                <span style={{
+                  background: item.available ? 'rgba(93,186,117,0.9)' : 'rgba(183,53,39,0.9)',
+                  color: 'var(--brand-cream)', fontSize: '9px', fontWeight: 700,
+                  fontFamily: 'var(--font-display)', letterSpacing: '0.5px', textTransform: 'uppercase',
+                  padding: '3px 8px', borderRadius: '20px'
+                }}>
                   {item.available ? 'Disponível' : 'Indisponível'}
-                </div>
+                </span>
               </div>
             </div>
-            <div className="p-4">
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <h3 className="font-semibold text-sm leading-tight">{item.name}</h3>
-                <div className="text-sm font-semibold text-[#e85d26] whitespace-nowrap">
+            <div style={{ padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)', textTransform: 'uppercase', lineHeight: 1.2 }}>
+                  {item.name}
+                </h3>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '17px', fontWeight: 800, color: 'var(--brand-gold)', whiteSpace: 'nowrap' }}>
                   R$ {Number(item.price).toFixed(2).replace('.',',')}
                 </div>
               </div>
-              <div className="text-xs text-white/30 mb-1">{item.category}</div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px', fontWeight: 600 }}>
+                {item.category}
+              </div>
               {item.weight_mode && item.weight_options && item.weight_options.length > 0 && (
-                <div className="text-xs text-purple-400 mb-2">
+                <div style={{ fontSize: '11px', color: 'var(--brand-gold)', opacity: 0.8 }}>
                   {item.weight_options.length} faixa{item.weight_options.length > 1 ? 's' : ''} de peso
                 </div>
               )}
-              <div className="flex gap-2 mt-3">
-                <button onClick={() => { setEditing(item); setIsNew(false) }}
-                  className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-xs text-white/60 hover:text-white transition flex items-center justify-center gap-1">
-                  <Edit2 size={12} /> Editar
+              <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
+                <button
+                  onClick={() => { setEditing(item); setIsNew(false) }}
+                  style={{
+                    flex: 1, padding: '7px', borderRadius: '6px',
+                    background: 'rgba(255,240,222,0.05)', border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-muted)', cursor: 'pointer', fontSize: '11px',
+                    fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s'
+                  }}
+                >
+                  <Edit2 size={11} /> Editar
                 </button>
-                <button onClick={() => handleToggleAvailable(item)}
-                  className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-xs text-white/60 hover:text-white transition flex items-center justify-center gap-1">
-                  {item.available ? <ToggleRight size={12} className="text-green-400" /> : <ToggleLeft size={12} className="text-red-400" />}
+                <button
+                  onClick={() => handleToggleAvailable(item)}
+                  style={{
+                    flex: 1, padding: '7px', borderRadius: '6px',
+                    background: 'rgba(255,240,222,0.05)', border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-muted)', cursor: 'pointer', fontSize: '11px',
+                    fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s'
+                  }}
+                >
+                  {item.available ? <ToggleRight size={11} style={{ color: '#5dba75' }} /> : <ToggleLeft size={11} style={{ color: 'var(--brand-red)' }} />}
                   {item.available ? 'Desativar' : 'Ativar'}
                 </button>
-                <button onClick={() => handleDelete(item.id)}
-                  className="py-1.5 px-3 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-xs text-red-400 transition">
+                <button
+                  onClick={() => handleDelete(item.id)}
+                  style={{
+                    padding: '7px 10px', borderRadius: '6px',
+                    background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.2)',
+                    color: 'var(--brand-red)', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s'
+                  }}
+                >
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -824,11 +1251,8 @@ function MenuTab() {
         ))}
       </div>
 
-      {/* Edit Modal */}
       <AnimatePresence>
-        {editing && (
-          <MenuItemModal item={editing} isNew={isNew} onClose={() => setEditing(null)} onSave={fetch} />
-        )}
+        {editing && <MenuItemModal item={editing} isNew={isNew} onClose={() => setEditing(null)} onSave={fetchMenu} />}
       </AnimatePresence>
     </Page>
   )
@@ -836,7 +1260,9 @@ function MenuTab() {
 
 // ─── MENU ITEM MODAL ──────────────────────────────────────────
 
-function MenuItemModal({ item, isNew, onClose, onSave }: { item: MenuItem; isNew: boolean; onClose: () => void; onSave: () => void }) {
+function MenuItemModal({ item, isNew, onClose, onSave }: {
+  item: MenuItem; isNew: boolean; onClose: () => void; onSave: () => void
+}) {
   const [form, setForm] = useState<MenuItem>({ ...item, weight_options: item.weight_options ?? [] })
   const [saving, setSaving] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -896,11 +1322,8 @@ function MenuItemModal({ item, isNew, onClose, onSave }: { item: MenuItem; isNew
       await supabase.from('menu_items').update(payload).eq('id', form.id)
     }
 
-    // Save weight options
     if (form.weight_mode && itemId && form.weight_options) {
-      // Delete existing
       await supabase.from('weight_options').delete().eq('menu_item_id', itemId)
-      // Insert new
       if (form.weight_options.length > 0) {
         await supabase.from('weight_options').insert(
           form.weight_options.map((o, i) => ({ ...o, menu_item_id: itemId, sort_order: i + 1, price: Number(o.price), max_grams: Number(o.max_grams) }))
@@ -913,140 +1336,235 @@ function MenuItemModal({ item, isNew, onClose, onSave }: { item: MenuItem; isNew
     onClose()
   }
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 12px', fontSize: '13px',
+    background: 'rgba(255,240,222,0.04)', border: '1px solid var(--border-subtle)',
+    borderRadius: '8px', color: 'var(--text-primary)', fontFamily: 'var(--font-body)'
+  }
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase',
+    letterSpacing: '1.5px', fontWeight: 700, display: 'block', marginBottom: '5px',
+    fontFamily: 'var(--font-display)'
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-6 backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(26,9,5,0.85)',
+        zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '24px', backdropFilter: 'blur(4px)'
+      }}
     >
       <motion.div
-        initial={{ scale: 0.95, y: 20 }}
+        initial={{ scale: 0.95, y: 16 }}
         animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.95, y: 20 }}
-        className="bg-[#1a1a1a] border border-white/10 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        exit={{ scale: 0.95, y: 16 }}
+        style={{
+          background: 'var(--surface-2)', border: '1px solid var(--border-medium)',
+          borderRadius: '18px', width: '100%', maxWidth: '600px',
+          maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: '0 24px 80px rgba(26,9,5,0.8)'
+        }}
       >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
-          <h2 className="font-semibold">{isNew ? 'Novo Item' : 'Editar Item'}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition"><X size={18} /></button>
+        {/* Modal Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)'
+        }}>
+          <div>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '22px', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
+              {isNew ? 'Novo Item' : 'Editar Item'}
+            </h2>
+            <StarDivider />
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent', border: '1px solid var(--border-subtle)',
+              borderRadius: '8px', padding: '6px', cursor: 'pointer',
+              color: 'var(--text-muted)', display: 'flex', alignItems: 'center'
+            }}
+          >
+            <X size={16} />
+          </button>
         </div>
 
-        <div className="p-6 space-y-5">
-          {/* Image */}
+        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          {/* Image Upload */}
           <div
             onClick={() => fileRef.current?.click()}
-            className="h-40 bg-[#111] border border-dashed border-white/10 rounded-2xl flex items-center justify-center cursor-pointer hover:border-[#e85d26]/40 transition overflow-hidden relative"
+            style={{
+              height: '150px', borderRadius: '12px', overflow: 'hidden',
+              border: '1px dashed var(--border-medium)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'var(--surface-3)', transition: 'border-color 0.15s',
+              position: 'relative'
+            }}
           >
             {imagePreview ? (
-              <img src={imagePreview} className="w-full h-full object-cover" />
+              <img src={imagePreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <div className="flex flex-col items-center gap-2 text-white/20">
-                <Upload size={28} />
-                <span className="text-sm">Clique para adicionar foto</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'var(--text-dim)' }}>
+                <Upload size={24} />
+                <span style={{ fontSize: '12px', fontFamily: 'var(--font-display)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  Clique para adicionar foto
+                </span>
               </div>
             )}
-            <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} className="hidden" />
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} style={{ display: 'none' }} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="text-[11px] text-white/40 uppercase tracking-wider block mb-1.5">Nome</label>
-              <input value={form.name} onChange={e => set('name', e.target.value)}
-                className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#e85d26]/50 text-white placeholder:text-white/20"
-                placeholder="Nome do item" />
+          {/* Fields */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Nome do Item</label>
+              <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Nome do item" style={inputStyle} />
             </div>
             <div>
-              <label className="text-[11px] text-white/40 uppercase tracking-wider block mb-1.5">Categoria</label>
-              <select value={form.category} onChange={e => set('category', e.target.value)}
-                className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#e85d26]/50 text-white">
+              <label style={labelStyle}>Categoria</label>
+              <select value={form.category} onChange={e => set('category', e.target.value)} style={inputStyle}>
                 <option>Carnes</option>
                 <option>Acompanhamentos</option>
                 <option>Bebidas</option>
               </select>
             </div>
             <div>
-              <label className="text-[11px] text-white/40 uppercase tracking-wider block mb-1.5">Preço base (R$)</label>
-              <input type="number" step="0.01" value={form.price} onChange={e => set('price', e.target.value)}
-                className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#e85d26]/50 text-white"
-                placeholder="0,00" />
+              <label style={labelStyle}>Preço base (R$)</label>
+              <input type="number" step="0.01" value={form.price} onChange={e => set('price', e.target.value)} placeholder="0,00" style={inputStyle} />
             </div>
-            <div className="col-span-2">
-              <label className="text-[11px] text-white/40 uppercase tracking-wider block mb-1.5">Descrição</label>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Descrição</label>
               <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={2}
-                className="w-full bg-[#111] border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#e85d26]/50 text-white placeholder:text-white/20 resize-none"
-                placeholder="Descrição do item" />
+                placeholder="Descrição do item" style={{ ...inputStyle, resize: 'none' }} />
             </div>
           </div>
 
-          {/* Weight mode toggle */}
+          {/* Weight mode — somente carnes */}
           {form.category === 'Carnes' && (
-            <div className="bg-purple-950/30 border border-purple-500/20 rounded-2xl p-5">
-              <div className="flex items-center justify-between mb-4">
+            <div style={{
+              background: 'rgba(183,53,39,0.07)', border: '1px solid rgba(183,53,39,0.2)',
+              borderRadius: '12px', padding: '18px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.weight_mode ? '14px' : '0' }}>
                 <div>
-                  <div className="font-medium text-sm flex items-center gap-2"><Scale size={16} className="text-purple-400" /> Modo Pesagem</div>
-                  <div className="text-xs text-white/40 mt-0.5">Ativa seleção de faixa de peso e pesagem pelo admin</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px', textTransform: 'uppercase', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Scale size={14} style={{ color: 'var(--brand-red)' }} /> Modo Pesagem
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                    Ativa seleção de faixas e pesagem pelo admin
+                  </div>
                 </div>
                 <button
                   onClick={() => set('weight_mode', !form.weight_mode)}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${form.weight_mode ? 'bg-purple-600' : 'bg-white/10'}`}
+                  style={{
+                    width: '44px', height: '24px', borderRadius: '12px',
+                    background: form.weight_mode ? 'var(--brand-red)' : 'var(--surface-3)',
+                    border: `1px solid ${form.weight_mode ? 'var(--brand-red)' : 'var(--border-medium)'}`,
+                    cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'all 0.2s'
+                  }}
                 >
-                  <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${form.weight_mode ? 'left-6' : 'left-0.5'}`}></div>
+                  <div style={{
+                    position: 'absolute', top: '3px',
+                    left: form.weight_mode ? '22px' : '3px',
+                    width: '16px', height: '16px', borderRadius: '50%',
+                    background: 'var(--brand-cream)', transition: 'left 0.2s'
+                  }} />
                 </button>
               </div>
 
               {form.weight_mode && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50 font-medium">Faixas de Peso</span>
-                    <button onClick={addWeightOption} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition">
-                      <Plus size={12} /> Adicionar faixa
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>Faixas de Peso</span>
+                    <button
+                      onClick={addWeightOption}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '4px',
+                        background: 'transparent', border: 'none', color: 'var(--brand-gold)',
+                        cursor: 'pointer', fontSize: '11px', fontFamily: 'var(--font-display)',
+                        fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase'
+                      }}
+                    >
+                      <Plus size={11} /> Adicionar
                     </button>
                   </div>
-                  {form.weight_options?.map((opt, i) => (
-                    <div key={i} className="bg-black/20 rounded-xl p-3 grid grid-cols-3 gap-2 items-end">
-                      <div>
-                        <label className="text-[10px] text-white/30 block mb-1">Label</label>
-                        <input value={opt.label} onChange={e => updateWeightOption(i, 'label', e.target.value)}
-                          placeholder="ex: Até 800g"
-                          className="w-full bg-black/30 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400/50 text-white placeholder:text-white/20" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-white/30 block mb-1">Máx. (g)</label>
-                        <input type="number" value={opt.max_grams} onChange={e => updateWeightOption(i, 'max_grams', e.target.value)}
-                          placeholder="800"
-                          className="w-full bg-black/30 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400/50 text-white placeholder:text-white/20" />
-                      </div>
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <label className="text-[10px] text-white/30 block mb-1">Preço (R$)</label>
-                          <input type="number" step="0.01" value={opt.price} onChange={e => updateWeightOption(i, 'price', e.target.value)}
-                            placeholder="149,90"
-                            className="w-full bg-black/30 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-400/50 text-white placeholder:text-white/20" />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {form.weight_options?.map((opt, i) => (
+                      <div key={i} style={{
+                        background: 'rgba(26,9,5,0.3)', borderRadius: '10px',
+                        padding: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '8px', alignItems: 'end'
+                      }}>
+                        <div>
+                          <label style={{ ...labelStyle, marginBottom: '4px' }}>Label</label>
+                          <input value={opt.label} onChange={e => updateWeightOption(i, 'label', e.target.value)}
+                            placeholder="ex: Até 800g" style={{ ...inputStyle, padding: '7px 10px', fontSize: '12px' }} />
                         </div>
-                        <button onClick={() => removeWeightOption(i)} className="pb-0 pt-4 text-red-400 hover:text-red-300 transition">
-                          <X size={14} />
+                        <div>
+                          <label style={{ ...labelStyle, marginBottom: '4px' }}>Máx. (g)</label>
+                          <input type="number" value={opt.max_grams} onChange={e => updateWeightOption(i, 'max_grams', e.target.value)}
+                            placeholder="800" style={{ ...inputStyle, padding: '7px 10px', fontSize: '12px' }} />
+                        </div>
+                        <div>
+                          <label style={{ ...labelStyle, marginBottom: '4px' }}>Preço (R$)</label>
+                          <input type="number" step="0.01" value={opt.price} onChange={e => updateWeightOption(i, 'price', e.target.value)}
+                            placeholder="149,90" style={{ ...inputStyle, padding: '7px 10px', fontSize: '12px' }} />
+                        </div>
+                        <button onClick={() => removeWeightOption(i)} style={{
+                          background: 'transparent', border: 'none', color: 'var(--brand-red)',
+                          cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center',
+                          marginBottom: '1px'
+                        }}>
+                          <X size={13} />
                         </button>
                       </div>
-                    </div>
-                  ))}
-                  {form.weight_options?.length === 0 && (
-                    <div className="text-center py-4 text-xs text-white/25">Nenhuma faixa adicionada ainda</div>
-                  )}
+                    ))}
+                    {form.weight_options?.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '16px', fontSize: '12px', color: 'var(--text-dim)' }}>
+                        Nenhuma faixa adicionada ainda
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-white/5 flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm text-white/50 hover:text-white bg-white/5 hover:bg-white/10 transition">
+        {/* Footer */}
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: '10px' }}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1, padding: '10px', borderRadius: '8px',
+              background: 'transparent', border: '1px solid var(--border-subtle)',
+              color: 'var(--text-muted)', cursor: 'pointer',
+              fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '13px',
+              letterSpacing: '1px', textTransform: 'uppercase', transition: 'all 0.15s'
+            }}
+          >
             Cancelar
           </button>
-          <button onClick={handleSave} disabled={saving || !form.name}
-            className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#e85d26] hover:bg-[#d44f1e] disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center justify-center gap-2">
-            {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-            {saving ? 'Salvando...' : 'Salvar'}
+          <button
+            onClick={handleSave}
+            disabled={saving || !form.name}
+            style={{
+              flex: 1, padding: '10px', borderRadius: '8px',
+              background: saving || !form.name ? 'rgba(183,53,39,0.3)' : 'var(--brand-red)',
+              border: '1px solid rgba(183,53,39,0.5)',
+              color: 'var(--brand-cream)', cursor: saving || !form.name ? 'not-allowed' : 'pointer',
+              fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '13px',
+              letterSpacing: '1px', textTransform: 'uppercase',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+              opacity: saving || !form.name ? 0.6 : 1, transition: 'all 0.15s'
+            }}
+          >
+            {saving ? <RefreshCw size={14} /> : <Save size={14} />}
+            {saving ? 'Salvando...' : 'Salvar Item'}
           </button>
         </div>
       </motion.div>
@@ -1060,7 +1578,7 @@ function CouponsTab() {
   const [coupons, setCoupons] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetch = async () => {
+  const fetchCoupons = async () => {
     setLoading(true)
     const { data } = await supabase
       .from('fidelity_coupons')
@@ -1070,54 +1588,86 @@ function CouponsTab() {
     setLoading(false)
   }
 
-  useEffect(() => { fetch() }, [])
+  useEffect(() => { fetchCoupons() }, [])
 
   const handleRedeem = async (id: string) => {
     await supabase.from('fidelity_coupons').update({ redeemed: true, redeemed_at: new Date().toISOString() }).eq('id', id)
-    fetch()
+    fetchCoupons()
   }
 
   const handleRevoke = async (id: string) => {
     if (!confirm('Revogar este cupom?')) return
     await supabase.from('fidelity_coupons').delete().eq('id', id)
-    fetch()
+    fetchCoupons()
   }
 
   return (
-    <Page title="Cupons" subtitle="Gerencie cupons de fidelidade dos clientes">
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <StatCard icon={Ticket} label="Total gerados" value={coupons.length} color="#e85d26" />
-        <StatCard icon={CheckCircle} label="Resgatados" value={coupons.filter(c => c.redeemed).length} color="#10b981" />
-        <StatCard icon={Clock} label="Disponíveis" value={coupons.filter(c => !c.redeemed).length} color="#f59e0b" />
+    <Page title="Cupons" subtitle="Fidelidade que aquece o coração da Praça">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '28px' }}>
+        <StatCard icon={Ticket}       label="Total gerados" value={coupons.length}                              color="var(--brand-red)" />
+        <StatCard icon={CheckCircle}  label="Resgatados"    value={coupons.filter(c => c.redeemed).length}      color="var(--brand-gold)" />
+        <StatCard icon={Clock}        label="Disponíveis"   value={coupons.filter(c => !c.redeemed).length}     color="var(--brand-gold)" />
       </div>
 
-      {loading && <div className="text-center py-12 text-white/30">Carregando...</div>}
+      {loading && <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>Carregando cupons...</div>}
 
-      <div className="space-y-3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {coupons.map(coupon => (
-          <div key={coupon.id} className="bg-[#161616] border border-white/5 rounded-2xl p-5 flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${coupon.redeemed ? 'bg-green-500/20' : 'bg-[#e85d26]/20'}`}>
-              <Ticket size={18} className={coupon.redeemed ? 'text-green-400' : 'text-[#e85d26]'} />
+          <div
+            key={coupon.id}
+            style={{
+              background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+              borderRadius: '12px', padding: '16px 20px',
+              display: 'flex', alignItems: 'center', gap: '14px'
+            }}
+          >
+            <div style={{
+              width: '36px', height: '36px', borderRadius: '8px', flexShrink: 0,
+              background: coupon.redeemed ? 'rgba(93,186,117,0.15)' : 'rgba(183,53,39,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Ticket size={16} style={{ color: coupon.redeemed ? '#5dba75' : 'var(--brand-red)' }} />
             </div>
-            <div className="flex-1">
-              <div className="font-mono text-sm font-semibold">{coupon.code}</div>
-              <div className="text-xs text-white/30 mt-0.5">
-                {coupon.profiles?.full_name ?? 'Cliente'} •{' '}
-                {new Date(coupon.created_at).toLocaleDateString('pt-BR')}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--brand-gold)', letterSpacing: '2px' }}>
+                {coupon.code}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                {coupon.profiles?.full_name ?? 'Cliente'} • {new Date(coupon.created_at).toLocaleDateString('pt-BR')}
                 {coupon.redeemed && coupon.redeemed_at && ` • Resgatado em ${new Date(coupon.redeemed_at).toLocaleDateString('pt-BR')}`}
               </div>
             </div>
-            <div className={`text-xs font-medium px-3 py-1 rounded-full ${coupon.redeemed ? 'bg-green-500/20 text-green-400' : 'bg-[#e85d26]/20 text-[#e85d26]'}`}>
+            <div style={{
+              padding: '4px 12px', borderRadius: '20px', fontSize: '10px',
+              fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', textTransform: 'uppercase',
+              background: coupon.redeemed ? 'rgba(93,186,117,0.15)' : 'rgba(199,173,112,0.15)',
+              color: coupon.redeemed ? '#5dba75' : 'var(--brand-gold)',
+              border: `1px solid ${coupon.redeemed ? 'rgba(93,186,117,0.3)' : 'rgba(199,173,112,0.3)'}`
+            }}>
               {coupon.redeemed ? 'Resgatado' : 'Disponível'}
             </div>
             {!coupon.redeemed && (
-              <div className="flex gap-2">
-                <button onClick={() => handleRedeem(coupon.id)}
-                  className="px-3 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg text-xs font-medium transition">
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={() => handleRedeem(coupon.id)}
+                  style={{
+                    padding: '6px 14px', borderRadius: '6px',
+                    background: 'rgba(93,186,117,0.1)', border: '1px solid rgba(93,186,117,0.3)',
+                    color: '#5dba75', cursor: 'pointer', fontSize: '11px',
+                    fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', transition: 'all 0.15s'
+                  }}
+                >
                   Resgatar
                 </button>
-                <button onClick={() => handleRevoke(coupon.id)}
-                  className="px-3 py-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg text-xs font-medium transition">
+                <button
+                  onClick={() => handleRevoke(coupon.id)}
+                  style={{
+                    padding: '6px 14px', borderRadius: '6px',
+                    background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.25)',
+                    color: 'var(--brand-red)', cursor: 'pointer', fontSize: '11px',
+                    fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', transition: 'all 0.15s'
+                  }}
+                >
                   Revogar
                 </button>
               </div>
@@ -1125,7 +1675,9 @@ function CouponsTab() {
           </div>
         ))}
         {!loading && coupons.length === 0 && (
-          <div className="text-center py-16 text-white/25 text-sm">Nenhum cupom gerado ainda</div>
+          <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
+            Nenhum cupom gerado ainda.
+          </div>
         )}
       </div>
     </Page>
@@ -1136,7 +1688,7 @@ function CouponsTab() {
 
 function ReportsTab() {
   const [range, setRange] = useState<'today' | 'week' | 'month'>('week')
-  const [data, setData] = useState<any>({ revenue: 0, orders: 0, avgTicket: 0, byCategory: [], topItems: [], byDay: [] })
+  const [data, setData] = useState<any>({ revenue: 0, orders: 0, avgTicket: 0, topItems: [], byDay: [] })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -1152,7 +1704,6 @@ function ReportsTab() {
       const revenue = list.reduce((s, o) => s + Number(o.total), 0)
       const avgTicket = list.length ? revenue / list.length : 0
 
-      // Items from JSONB
       const allItems: any[] = list.flatMap(o => Array.isArray(o.items) ? o.items : [])
       const itemCount: Record<string, { name: string; count: number; revenue: number }> = {}
       allItems.forEach(item => {
@@ -1162,7 +1713,6 @@ function ReportsTab() {
       })
       const topItems = Object.values(itemCount).sort((a, b) => b.count - a.count).slice(0, 5)
 
-      // By day
       const byDay: Record<string, number> = {}
       list.forEach(o => {
         const day = new Date(o.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
@@ -1177,77 +1727,122 @@ function ReportsTab() {
   const maxRevenue = Math.max(...data.byDay.map(([,v]: any) => v), 1)
 
   return (
-    <Page title="Relatórios" subtitle="Análise de faturamento e desempenho"
+    <Page
+      title="Relatórios"
+      subtitle="A brasa que nos move é a mesma que nos une"
       action={
-        <div className="flex gap-2">
+        <div style={{ display: 'flex', gap: '6px' }}>
           {[['today','Hoje'],['week','7 dias'],['month','30 dias']].map(([k,l]) => (
-            <button key={k} onClick={() => setRange(k as any)}
-              className={`px-3 py-2 rounded-xl text-xs font-medium transition ${range === k ? 'bg-[#e85d26] text-white' : 'bg-[#161616] text-white/40 border border-white/5 hover:text-white'}`}>
+            <button
+              key={k}
+              onClick={() => setRange(k as any)}
+              style={{
+                padding: '8px 16px', borderRadius: '8px', fontSize: '12px',
+                fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '0.5px', textTransform: 'uppercase',
+                cursor: 'pointer', transition: 'all 0.15s',
+                background: range === k ? 'var(--brand-red)' : 'var(--surface-2)',
+                border: range === k ? '1px solid var(--brand-red)' : '1px solid var(--border-subtle)',
+                color: range === k ? 'var(--brand-cream)' : 'var(--text-muted)'
+              }}
+            >
               {l}
             </button>
           ))}
         </div>
       }
     >
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <StatCard icon={DollarSign}  label="Faturamento" value={`R$ ${data.revenue.toFixed(2).replace('.',',')}`} color="#10b981" />
-        <StatCard icon={ShoppingBag} label="Pedidos"     value={data.orders}                                       color="#e85d26" />
-        <StatCard icon={TrendingUp}  label="Ticket médio" value={`R$ ${data.avgTicket.toFixed(2).replace('.',',')}`} color="#8b5cf6" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '28px' }}>
+        <StatCard icon={DollarSign}  label="Faturamento"  value={`R$ ${data.revenue.toFixed(2).replace('.',',')}`}      color="var(--brand-gold)" />
+        <StatCard icon={ShoppingBag} label="Pedidos"      value={data.orders}                                            color="var(--brand-red)" />
+        <StatCard icon={TrendingUp}  label="Ticket Médio" value={`R$ ${data.avgTicket.toFixed(2).replace('.',',')}`}    color="var(--brand-gold)" />
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
-        {/* Bar chart by day */}
-        <div className="bg-[#161616] border border-white/5 rounded-2xl p-5">
-          <h3 className="text-sm font-medium mb-5">Faturamento por dia</h3>
-          {loading ? (
-            <div className="text-center py-8 text-white/30 text-sm">Carregando...</div>
-          ) : data.byDay.length === 0 ? (
-            <div className="text-center py-8 text-white/25 text-sm">Sem dados no período</div>
-          ) : (
-            <div className="flex items-end gap-2 h-36">
-              {data.byDay.map(([day, val]: any) => (
-                <div key={day} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="text-[9px] text-white/30 font-mono">
-                    R${(val/100).toFixed(0)}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+        {/* Bar chart */}
+        <SectionCard>
+          <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-primary)' }}>
+              Faturamento por Dia
+            </h3>
+          </div>
+          <div style={{ padding: '20px' }}>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dim)', fontSize: '13px' }}>Carregando...</div>
+            ) : data.byDay.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dim)', fontSize: '12px' }}>Sem dados no período</div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '140px' }}>
+                {data.byDay.map(([day, val]: any) => (
+                  <div key={day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', height: '100%', justifyContent: 'flex-end' }}>
+                    <div style={{ fontSize: '9px', color: 'var(--brand-gold)', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
+                      {(val/100).toFixed(0)}
+                    </div>
+                    <div style={{
+                      width: '100%', background: 'var(--brand-red)', borderRadius: '4px 4px 0 0',
+                      height: `${Math.max((val / maxRevenue) * 100, 4)}%`,
+                      opacity: 0.85, transition: 'height 0.3s ease',
+                      position: 'relative', overflow: 'hidden'
+                    }}>
+                      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'var(--brand-gold)' }} />
+                    </div>
+                    <div style={{ fontSize: '9px', color: 'var(--text-dim)' }}>{day}</div>
                   </div>
-                  <div
-                    className="w-full bg-[#e85d26]/80 rounded-t-md transition-all"
-                    style={{ height: `${Math.max((val / maxRevenue) * 100, 4)}%` }}
-                  />
-                  <div className="text-[9px] text-white/30">{day}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </SectionCard>
 
         {/* Top items */}
-        <div className="bg-[#161616] border border-white/5 rounded-2xl p-5">
-          <h3 className="text-sm font-medium mb-5">Itens mais pedidos</h3>
-          {loading ? (
-            <div className="text-center py-8 text-white/30 text-sm">Carregando...</div>
-          ) : data.topItems.length === 0 ? (
-            <div className="text-center py-8 text-white/25 text-sm">Sem dados no período</div>
-          ) : (
-            <div className="space-y-3">
-              {data.topItems.map((item: any, i: number) => (
-                <div key={item.name} className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full bg-[#e85d26]/20 text-[#e85d26] text-[10px] font-bold flex items-center justify-center shrink-0">
-                    {i + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium truncate">{item.name}</div>
-                    <div className="w-full bg-white/5 rounded-full h-1 mt-1">
-                      <div className="bg-[#e85d26] h-1 rounded-full" style={{ width: `${(item.count / (data.topItems[0]?.count ?? 1)) * 100}%` }} />
+        <SectionCard>
+          <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-primary)' }}>
+              Itens Mais Pedidos
+            </h3>
+          </div>
+          <div style={{ padding: '20px' }}>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dim)', fontSize: '13px' }}>Carregando...</div>
+            ) : data.topItems.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dim)', fontSize: '12px' }}>Sem dados no período</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {data.topItems.map((item: any, i: number) => (
+                  <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                      background: i === 0 ? 'var(--brand-gold)' : 'rgba(183,53,39,0.2)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-display)',
+                      color: i === 0 ? 'var(--brand-dark)' : 'var(--brand-red)'
+                    }}>
+                      {i + 1}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '4px' }}>
+                        {item.name}
+                      </div>
+                      <div style={{ height: '3px', background: 'var(--surface-3)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: '2px',
+                          background: i === 0 ? 'var(--brand-gold)' : 'var(--brand-red)',
+                          width: `${(item.count / (data.topItems[0]?.count ?? 1)) * 100}%`,
+                          transition: 'width 0.4s ease'
+                        }} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', flexShrink: 0, alignItems: 'center' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{item.count}x</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--brand-gold)' }}>
+                        R$ {item.revenue.toFixed(0)}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-xs text-white/40 shrink-0">{item.count}x</div>
-                  <div className="text-xs font-medium shrink-0">R$ {item.revenue.toFixed(0)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </SectionCard>
       </div>
     </Page>
   )
