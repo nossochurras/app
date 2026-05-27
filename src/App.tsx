@@ -276,7 +276,8 @@ export default function App() {
   const [menuItems, setMenuItems] = useState<DynamicMenuItem[]>([]);
   const [weightModal, setWeightModal] = useState<DynamicMenuItem | null>(null);
   const [awaitingWeighingOrderId, setAwaitingWeighingOrderId] = useState<string | null>(null);
-
+  const [weighedTotal, setWeighedTotal] = useState<number | null>(null);
+  
   const checkRole = React.useCallback(async (userId: string) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
@@ -869,7 +870,7 @@ export default function App() {
         {view === 'checkout' && (
           <CheckoutScreen
             location={location}
-            cartTotal={cartTotal}
+            cartTotal={weighedTotal !== null ? weighedTotal : cartTotal}
             onBack={() => setView('cart')}
             onFinalize={async (paymentType: 'app' | 'local') => {
               if (awaitingWeighingOrderId) {
@@ -988,7 +989,7 @@ export default function App() {
             orderCode={orderCode}
             location={location}
             onConfirmed={async (finalPrice: number) => {
-              // Vai para checkout para escolher forma de pagamento
+              setWeighedTotal(finalPrice);
               setView('checkout');
             }}
           />
@@ -1058,6 +1059,7 @@ export default function App() {
                 setOrderCode('');
                 setFidelityNewCoupon(null);
                 setAwaitingWeighingOrderId(null);
+                setWeighedTotal(null);
                 setView('welcome');
               }}
               className="bg-brand-cream text-brand-red font-bold text-lg py-4 px-10 rounded-full hover:scale-105 transition shadow-xl"
