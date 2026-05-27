@@ -1589,6 +1589,44 @@ function MenuItemModal({ item, isNew, onClose, onSave }: {
 // ─── COUPONS TAB ──────────────────────────────────────────────
 
 function CouponsTab() {
+  const [subTab, setSubTab] = useState<'fidelity' | 'manual' | 'validate'>('fidelity')
+
+  return (
+    <Page title="Cupons" subtitle="Fidelidade, promoções e validação presencial">
+      {/* Sub-tabs */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+        {[
+          ['fidelity', 'Fidelidade'],
+          ['manual', 'Cupons Manuais'],
+          ['validate', 'Validar Cupom'],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setSubTab(key as any)}
+            style={{
+              padding: '8px 18px', borderRadius: '20px', fontSize: '12px',
+              fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '1px', textTransform: 'uppercase',
+              cursor: 'pointer', transition: 'all 0.15s',
+              background: subTab === key ? 'var(--brand-red)' : 'var(--surface-2)',
+              border: subTab === key ? '1px solid var(--brand-red)' : '1px solid var(--border-subtle)',
+              color: subTab === key ? 'var(--brand-cream)' : 'var(--text-muted)'
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {subTab === 'fidelity' && <FidelityCouponsSubTab />}
+      {subTab === 'manual' && <ManualCouponsSubTab />}
+      {subTab === 'validate' && <ValidateCouponSubTab />}
+    </Page>
+  )
+}
+
+// ─── FIDELITY COUPONS ─────────────────────────────────────────
+
+function FidelityCouponsSubTab() {
   const [coupons, setCoupons] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -1616,25 +1654,22 @@ function CouponsTab() {
   }
 
   return (
-    <Page title="Cupons" subtitle="Fidelidade que aquece o coração da Praça">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '28px' }}>
-        <StatCard icon={Ticket}       label="Total gerados" value={coupons.length}                              color="var(--brand-red)" />
-        <StatCard icon={CheckCircle}  label="Resgatados"    value={coupons.filter(c => c.redeemed).length}      color="var(--brand-gold)" />
-        <StatCard icon={Clock}        label="Disponíveis"   value={coupons.filter(c => !c.redeemed).length}     color="var(--brand-gold)" />
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '24px' }}>
+        <StatCard icon={Ticket}      label="Total gerados" value={coupons.length}                             color="var(--brand-red)" />
+        <StatCard icon={CheckCircle} label="Resgatados"    value={coupons.filter(c => c.redeemed).length}    color="var(--brand-gold)" />
+        <StatCard icon={Clock}       label="Disponíveis"   value={coupons.filter(c => !c.redeemed).length}   color="var(--brand-gold)" />
       </div>
 
-      {loading && <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>Carregando cupons...</div>}
+      {loading && <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>Carregando...</div>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {coupons.map(coupon => (
-          <div
-            key={coupon.id}
-            style={{
-              background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
-              borderRadius: '12px', padding: '16px 20px',
-              display: 'flex', alignItems: 'center', gap: '14px'
-            }}
-          >
+          <div key={coupon.id} style={{
+            background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+            borderRadius: '12px', padding: '16px 20px',
+            display: 'flex', alignItems: 'center', gap: '14px'
+          }}>
             <div style={{
               width: '36px', height: '36px', borderRadius: '8px', flexShrink: 0,
               background: coupon.redeemed ? 'rgba(93,186,117,0.15)' : 'rgba(183,53,39,0.15)',
@@ -1662,26 +1697,20 @@ function CouponsTab() {
             </div>
             {!coupon.redeemed && (
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button
-                  onClick={() => handleRedeem(coupon.id)}
-                  style={{
-                    padding: '6px 14px', borderRadius: '6px',
-                    background: 'rgba(93,186,117,0.1)', border: '1px solid rgba(93,186,117,0.3)',
-                    color: '#5dba75', cursor: 'pointer', fontSize: '11px',
-                    fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', transition: 'all 0.15s'
-                  }}
-                >
+                <button onClick={() => handleRedeem(coupon.id)} style={{
+                  padding: '6px 14px', borderRadius: '6px',
+                  background: 'rgba(93,186,117,0.1)', border: '1px solid rgba(93,186,117,0.3)',
+                  color: '#5dba75', cursor: 'pointer', fontSize: '11px',
+                  fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase'
+                }}>
                   Resgatar
                 </button>
-                <button
-                  onClick={() => handleRevoke(coupon.id)}
-                  style={{
-                    padding: '6px 14px', borderRadius: '6px',
-                    background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.25)',
-                    color: 'var(--brand-red)', cursor: 'pointer', fontSize: '11px',
-                    fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', transition: 'all 0.15s'
-                  }}
-                >
+                <button onClick={() => handleRevoke(coupon.id)} style={{
+                  padding: '6px 14px', borderRadius: '6px',
+                  background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.25)',
+                  color: 'var(--brand-red)', cursor: 'pointer', fontSize: '11px',
+                  fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase'
+                }}>
                   Revogar
                 </button>
               </div>
@@ -1690,11 +1719,401 @@ function CouponsTab() {
         ))}
         {!loading && coupons.length === 0 && (
           <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
-            Nenhum cupom gerado ainda.
+            Nenhum cupom de fidelidade gerado ainda.
           </div>
         )}
       </div>
-    </Page>
+    </div>
+  )
+}
+
+// ─── MANUAL COUPONS ───────────────────────────────────────────
+
+function ManualCouponsSubTab() {
+  const [coupons, setCoupons] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({
+    code: '', type: 'fixed', discount_value: '', free_item_description: '',
+    max_uses: '1', expires_at: ''
+  })
+  const [saving, setSaving] = useState(false)
+
+  const fetchCoupons = async () => {
+    setLoading(true)
+    const { data } = await supabase.from('coupons').select('*').order('created_at', { ascending: false })
+    setCoupons(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchCoupons() }, [])
+
+  const handleSave = async () => {
+    if (!form.code) return
+    setSaving(true)
+    await supabase.from('coupons').insert({
+      code: form.code.toUpperCase().trim(),
+      type: form.type,
+      discount_value: form.discount_value ? Number(form.discount_value) : null,
+      free_item_description: form.free_item_description || null,
+      max_uses: Number(form.max_uses),
+      expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
+      active: true,
+    })
+    setSaving(false)
+    setShowForm(false)
+    setForm({ code: '', type: 'fixed', discount_value: '', free_item_description: '', max_uses: '1', expires_at: '' })
+    fetchCoupons()
+  }
+
+  const handleToggle = async (id: string, active: boolean) => {
+    await supabase.from('coupons').update({ active: !active }).eq('id', id)
+    fetchCoupons()
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Excluir este cupom?')) return
+    await supabase.from('coupons').delete().eq('id', id)
+    fetchCoupons()
+  }
+
+  const typeLabel = (type: string) => ({ fixed: 'R$ Fixo', percent: '% Desconto', free_item: 'Item Grátis' }[type] ?? type)
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', fontSize: '13px',
+    background: 'rgba(255,240,222,0.04)', border: '1px solid var(--border-subtle)',
+    borderRadius: '8px', color: 'var(--text-primary)', fontFamily: 'var(--font-body)'
+  }
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase',
+    letterSpacing: '1.5px', fontWeight: 700, display: 'block', marginBottom: '5px',
+    fontFamily: 'var(--font-display)'
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+        <GoldButton onClick={() => setShowForm(v => !v)} small>
+          <Plus size={13} /> {showForm ? 'Cancelar' : 'Novo Cupom'}
+        </GoldButton>
+      </div>
+
+      {showForm && (
+        <div style={{
+          background: 'var(--surface-2)', border: '1px solid var(--border-medium)',
+          borderRadius: '14px', padding: '20px', marginBottom: '20px'
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={labelStyle}>Código</label>
+              <input value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
+                placeholder="EX: PROMO20" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Tipo</label>
+              <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inputStyle}>
+                <option value="fixed">R$ Fixo</option>
+                <option value="percent">% Desconto</option>
+                <option value="free_item">Item Grátis</option>
+              </select>
+            </div>
+            {(form.type === 'fixed' || form.type === 'percent') && (
+              <div>
+                <label style={labelStyle}>{form.type === 'fixed' ? 'Valor (R$)' : 'Percentual (%)'}</label>
+                <input type="number" value={form.discount_value}
+                  onChange={e => setForm(f => ({ ...f, discount_value: e.target.value }))}
+                  placeholder={form.type === 'fixed' ? '20.00' : '10'} style={inputStyle} />
+              </div>
+            )}
+            {form.type === 'free_item' && (
+              <div>
+                <label style={labelStyle}>Descrição do Item Grátis</label>
+                <input value={form.free_item_description}
+                  onChange={e => setForm(f => ({ ...f, free_item_description: e.target.value }))}
+                  placeholder="ex: Porção de Farofa" style={inputStyle} />
+              </div>
+            )}
+            <div>
+              <label style={labelStyle}>Máx. de Usos</label>
+              <input type="number" value={form.max_uses}
+                onChange={e => setForm(f => ({ ...f, max_uses: e.target.value }))}
+                placeholder="1" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Expira em</label>
+              <input type="datetime-local" value={form.expires_at}
+                onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} style={inputStyle} />
+            </div>
+          </div>
+          <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+            <GoldButton onClick={handleSave} disabled={saving || !form.code} small>
+              <Save size={13} /> {saving ? 'Salvando...' : 'Criar Cupom'}
+            </GoldButton>
+          </div>
+        </div>
+      )}
+
+      {loading && <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>Carregando...</div>}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {coupons.map(coupon => {
+          const expired = coupon.expires_at && new Date(coupon.expires_at) < new Date()
+          const exhausted = coupon.used_count >= coupon.max_uses
+          const statusColor = !coupon.active || expired || exhausted ? 'var(--brand-red)' : '#5dba75'
+          const statusLabel = !coupon.active ? 'Inativo' : expired ? 'Expirado' : exhausted ? 'Esgotado' : 'Ativo'
+
+          return (
+            <div key={coupon.id} style={{
+              background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+              borderRadius: '12px', padding: '14px 18px',
+              display: 'flex', alignItems: 'center', gap: '14px',
+              opacity: !coupon.active || expired || exhausted ? 0.6 : 1
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--brand-gold)', letterSpacing: '2px' }}>
+                    {coupon.code}
+                  </span>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: '20px', fontSize: '9px',
+                    fontWeight: 700, fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.5px',
+                    color: statusColor, background: `${statusColor}18`, border: `1px solid ${statusColor}30`
+                  }}>
+                    {statusLabel}
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <span>{typeLabel(coupon.type)}{coupon.discount_value ? `: ${coupon.type === 'fixed' ? 'R$ ' : ''}${coupon.discount_value}${coupon.type === 'percent' ? '%' : ''}` : ''}{coupon.free_item_description ? `: ${coupon.free_item_description}` : ''}</span>
+                  <span>Usos: {coupon.used_count}/{coupon.max_uses}</span>
+                  {coupon.expires_at && <span>Expira: {new Date(coupon.expires_at).toLocaleDateString('pt-BR')}</span>}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={() => handleToggle(coupon.id, coupon.active)} style={{
+                  padding: '6px 12px', borderRadius: '6px',
+                  background: coupon.active ? 'rgba(183,53,39,0.08)' : 'rgba(93,186,117,0.08)',
+                  border: `1px solid ${coupon.active ? 'rgba(183,53,39,0.25)' : 'rgba(93,186,117,0.25)'}`,
+                  color: coupon.active ? 'var(--brand-red)' : '#5dba75',
+                  cursor: 'pointer', fontSize: '11px',
+                  fontFamily: 'var(--font-display)', fontWeight: 700, textTransform: 'uppercase'
+                }}>
+                  {coupon.active ? 'Desativar' : 'Ativar'}
+                </button>
+                <button onClick={() => handleDelete(coupon.id)} style={{
+                  padding: '6px 10px', borderRadius: '6px',
+                  background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.25)',
+                  color: 'var(--brand-red)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center'
+                }}>
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        {!loading && coupons.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-dim)', fontSize: '13px' }}>
+            Nenhum cupom manual criado ainda.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── VALIDATE COUPON ──────────────────────────────────────────
+
+function ValidateCouponSubTab() {
+  const [code, setCode] = useState('')
+  const [result, setResult] = useState<any>(null)
+  const [notFound, setNotFound] = useState(false)
+  const [redeeming, setRedeeming] = useState(false)
+  const [redeemed, setRedeemed] = useState(false)
+
+  const handleSearch = async () => {
+    setResult(null)
+    setNotFound(false)
+    setRedeemed(false)
+
+    const upperCode = code.toUpperCase().trim()
+
+    // Checa fidelity_coupons
+    const { data: fidelity } = await supabase
+      .from('fidelity_coupons')
+      .select('*, profiles(full_name)')
+      .eq('code', upperCode)
+      .maybeSingle()
+
+    if (fidelity) {
+      setResult({ source: 'fidelity', ...fidelity })
+      return
+    }
+
+    // Checa coupons manuais
+    const { data: manual } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('code', upperCode)
+      .maybeSingle()
+
+    if (manual) {
+      setResult({ source: 'manual', ...manual })
+      return
+    }
+
+    setNotFound(true)
+  }
+
+  const handleRedeemFidelity = async () => {
+    setRedeeming(true)
+    await supabase.from('fidelity_coupons')
+      .update({ redeemed: true, redeemed_at: new Date().toISOString() })
+      .eq('id', result.id)
+    setRedeeming(false)
+    setRedeemed(true)
+    setResult((r: any) => ({ ...r, redeemed: true }))
+  }
+
+  const handleRedeemManual = async () => {
+    setRedeeming(true)
+    await supabase.from('coupons').update({ used_count: result.used_count + 1 }).eq('id', result.id)
+    await supabase.from('coupon_uses').insert({ coupon_id: result.id, user_id: null, order_id: null })
+    setRedeeming(false)
+    setRedeemed(true)
+    setResult((r: any) => ({ ...r, used_count: r.used_count + 1 }))
+  }
+
+  const isManualValid = result?.source === 'manual' &&
+    result.active &&
+    result.used_count < result.max_uses &&
+    (!result.expires_at || new Date(result.expires_at) > new Date())
+
+  const isFidelityValid = result?.source === 'fidelity' && !result.redeemed
+
+  const inputStyle: React.CSSProperties = {
+    padding: '12px 16px', fontSize: '15px', fontFamily: 'var(--font-display)',
+    fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase',
+    background: 'rgba(255,240,222,0.04)', border: '1px solid var(--border-medium)',
+    borderRadius: '10px', color: 'var(--text-primary)', width: '100%'
+  }
+
+  return (
+    <div style={{ maxWidth: '520px' }}>
+      <div style={{
+        background: 'var(--surface-2)', border: '1px solid var(--border-medium)',
+        borderRadius: '14px', padding: '24px', marginBottom: '20px'
+      }}>
+        <div style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '2px', fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: '12px' }}>
+          Verificar Cupom Presencialmente
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <input
+            value={code}
+            onChange={e => setCode(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSearch()}
+            placeholder="DIGITE O CÓDIGO"
+            style={inputStyle}
+          />
+          <GoldButton onClick={handleSearch}>
+            <Search size={14} /> Verificar
+          </GoldButton>
+        </div>
+      </div>
+
+      {notFound && (
+        <div style={{
+          background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.3)',
+          borderRadius: '12px', padding: '20px', textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--brand-red)', fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+            Cupom não encontrado
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>
+            O código "{code.toUpperCase()}" não existe no sistema.
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div style={{
+          background: 'var(--surface-2)', border: `1px solid ${(isFidelityValid || isManualValid) && !redeemed ? 'rgba(93,186,117,0.4)' : 'rgba(183,53,39,0.3)'}`,
+          borderRadius: '14px', overflow: 'hidden'
+        }}>
+          <div style={{
+            padding: '14px 20px',
+            background: (isFidelityValid || isManualValid) && !redeemed ? 'rgba(93,186,117,0.08)' : 'rgba(183,53,39,0.08)',
+            borderBottom: '1px solid var(--border-subtle)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+          }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: 800, letterSpacing: '3px', color: 'var(--brand-gold)' }}>
+              {result.code}
+            </span>
+            <span style={{
+              padding: '4px 12px', borderRadius: '20px', fontSize: '11px',
+              fontWeight: 700, fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.5px',
+              color: (isFidelityValid || isManualValid) && !redeemed ? '#5dba75' : 'var(--brand-red)',
+              background: (isFidelityValid || isManualValid) && !redeemed ? 'rgba(93,186,117,0.15)' : 'rgba(183,53,39,0.15)'
+            }}>
+              {redeemed ? 'Resgatado agora' :
+                result.source === 'fidelity'
+                  ? (result.redeemed ? 'Já resgatado' : 'Válido')
+                  : (!result.active ? 'Inativo' :
+                      result.used_count >= result.max_uses ? 'Esgotado' :
+                      result.expires_at && new Date(result.expires_at) < new Date() ? 'Expirado' : 'Válido')}
+            </span>
+          </div>
+
+          <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {result.source === 'fidelity' && (
+              <>
+                <Row label="Tipo" value="Fidelidade — Porção Grátis" />
+                <Row label="Cliente" value={result.profiles?.full_name ?? 'Cliente'} />
+                <Row label="Gerado em" value={new Date(result.created_at).toLocaleDateString('pt-BR')} />
+                {result.redeemed && <Row label="Resgatado em" value={new Date(result.redeemed_at).toLocaleDateString('pt-BR')} />}
+              </>
+            )}
+            {result.source === 'manual' && (
+              <>
+                <Row label="Tipo" value={{ fixed: 'Desconto fixo', percent: 'Desconto percentual', free_item: 'Item grátis' }[result.type] ?? result.type} />
+                {result.discount_value && <Row label="Desconto" value={result.type === 'fixed' ? `R$ ${Number(result.discount_value).toFixed(2)}` : `${result.discount_value}%`} />}
+                {result.free_item_description && <Row label="Item Grátis" value={result.free_item_description} />}
+                <Row label="Usos" value={`${result.used_count} / ${result.max_uses}`} />
+                {result.expires_at && <Row label="Expira em" value={new Date(result.expires_at).toLocaleDateString('pt-BR')} />}
+              </>
+            )}
+          </div>
+
+          {(isFidelityValid || isManualValid) && !redeemed && (
+            <div style={{ padding: '0 20px 20px' }}>
+              <button
+                onClick={result.source === 'fidelity' ? handleRedeemFidelity : handleRedeemManual}
+                disabled={redeeming}
+                style={{
+                  width: '100%', padding: '12px',
+                  background: 'rgba(93,186,117,0.15)', border: '1px solid rgba(93,186,117,0.4)',
+                  borderRadius: '10px', color: '#5dba75', cursor: redeeming ? 'not-allowed' : 'pointer',
+                  fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '13px',
+                  letterSpacing: '1px', textTransform: 'uppercase',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                }}
+              >
+                <CheckCircle size={15} /> {redeeming ? 'Resgatando...' : 'Confirmar Resgate Presencial'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{label}</span>
+      <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>{value}</span>
+    </div>
   )
 }
 
