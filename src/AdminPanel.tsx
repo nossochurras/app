@@ -81,6 +81,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   ready:             { label: 'Pronto!',         color: '#c7ad70', bg: '#c7ad7044', next: 'delivered' },
   delivered:         { label: 'Entregue',        color: '#6b6b5e', bg: '#6b6b5e22', next: null },
   cancelled:         { label: 'Cancelado',       color: '#b73527', bg: '#b7352722', next: null },
+  paid: { label: 'Pago', color: '#10b981', bg: '#d1fae5', next: 'preparing' },
 }
 
 // ─── SOUND ───────────────────────────────────────────────────
