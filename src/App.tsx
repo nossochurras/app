@@ -893,9 +893,64 @@ export default function App() {
                 return;
               }
             
-              // Fluxo normal sem pesagem — código existente abaixo
-              // ... resto igual ao da Alteração 4
+              // Fluxo normal sem pesagem
+              let code: string;
+              if (location === 'Retirada no Balcão') {
+                code = Math.random().toString(36).substring(2, 8).toUpperCase();
+              } else {
+                const { data: lastOrder } = await supabase
+                  .from('orders')
+                  .select('order_code')
+                  .neq('location', 'Retirada no Balcão')
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                const lastNumber = lastOrder ? parseInt(lastOrder.order_code, 10) : 0;
+                const nextNumber = (isNaN(lastNumber) ? 0 : lastNumber) + 1;
+                code = nextNumber.toString().padStart(3, '0');
+              }
+            
+              setOrderCode(code);
+            
+              if (user?.id) {
+                const { error } = await supabase
+                  .from('orders')
+                  .insert({
+                    user_id: user.id,
+                    location: location,
+                    items: cart.map(c => ({
+                      id: c.item.id,
+                      name: c.item.name,
+                      price: c.price,
+                      quantity: c.quantity,
+                      weight_mode: c.item.weight_mode,
+                      chosen_label: c.weightOption?.label ?? null,
+                      chosen_max_grams: c.weightOption?.max_grams ?? null,
+                      weight_option_id: c.weightOption?.id ?? null,
+                      unit_price: c.price,
+                      final_price: null,
+                      real_grams: null,
+                    })),
+                    total: cartTotal,
+                    payment_type: paymentType,
+                    order_code: code,
+                    status: 'pending',
+                  });
+            
+                if (error) {
+                  console.error('Erro ao salvar pedido:', error.message);
+                  return;
+                }
+            
+                const result = await addSpentAndCheckGoal(user.id, cartTotal);
+                if (result.couponGenerated && result.couponCode) {
+                  setFidelityNewCoupon(result.couponCode);
+                }
+              }
+            
+              setView('success');
             }}
+          />
 
         {/* PROFILE SCREEN */}
         {(view === 'profile' || view === 'coupons') && (
