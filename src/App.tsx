@@ -792,6 +792,14 @@ export default function App() {
                 <div className="absolute inset-0 w-full h-full bg-white/20 scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-300"></div>
                 <span className="relative z-10">Fazer Pedido</span>
               </button>
+
+              <button
+                onClick={() => setView('profile')}
+                className="group relative bg-transparent border-2 border-brand-dark/30 text-brand-dark text-base font-bold uppercase tracking-wider py-3 px-12 md:px-16 rounded-full hover:border-brand-dark hover:bg-brand-dark/5 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center gap-2"
+              >
+                <User size={18} />
+                <span>Minha Conta</span>
+              </button>
             </div>
           </motion.div>
         )}
