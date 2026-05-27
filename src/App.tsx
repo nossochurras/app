@@ -874,13 +874,10 @@ export default function App() {
             onBack={() => setView('cart')}
             onFinalize={async (paymentType: 'app' | 'local') => {
               if (awaitingWeighingOrderId) {
-                await supabase
-                  .from('orders')
-                  .update({
-                    payment_type: paymentType,
-                    status: 'preparing',
-                  })
-                  .eq('id', awaitingWeighingOrderId);
+                await supabase.from('orders').update({
+                  payment_type: paymentType,
+                  status: 'paid',
+                }).eq('id', awaitingWeighingOrderId);
 
                 if (user?.id) {
                   const result = await addSpentAndCheckGoal(user.id, cartTotal);
@@ -1129,10 +1126,6 @@ function AwaitingWeighingScreen({
 
   const handleConfirm = async () => {
     setConfirmed(true);
-    await supabase
-      .from('orders')
-      .update({ status: 'preparing' })
-      .eq('id', orderId);
     onConfirmed(notification?.final_price ?? 0);
   };
 
