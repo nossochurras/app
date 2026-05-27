@@ -19,7 +19,24 @@ import {
 
 // ─── TYPES ───────────────────────────────────────────────────
 
-type Profile = { id: string; full_name: string; role: string }
+type AdminPermissions = {
+  view_dashboard?: boolean
+  view_orders?: boolean
+  manage_orders?: boolean
+  view_menu?: boolean
+  manage_menu?: boolean
+  view_coupons?: boolean
+  manage_coupons?: boolean
+  view_reports?: boolean
+  manage_admins?: boolean
+}
+
+type Profile = {
+  id: string
+  full_name: string
+  role: 'super_admin' | 'admin' | 'user'
+  permissions: AdminPermissions
+}
 
 type WeightOption = {
   id?: string
@@ -169,7 +186,7 @@ export default function AdminPanel() {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { window.location.href = '/'; return }
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      if (!data || data.role !== 'admin') { window.location.href = '/'; return }
+      if (!data || (data.role !== 'admin' && data.role !== 'super_admin')) { window.location.href = '/'; return }
       setProfile(data)
       setLoading(false)
     })
@@ -228,12 +245,14 @@ export default function AdminPanel() {
           {/* Nav */}
           <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {[
-              { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-              { id: 'orders',    icon: ShoppingBag,     label: 'Pedidos',   badge: newOrderCount > 0 ? newOrderCount : null },
-              { id: 'menu',      icon: UtensilsCrossed, label: 'Cardápio' },
-              { id: 'coupons',   icon: Ticket,          label: 'Cupons' },
-              { id: 'reports',   icon: BarChart2,       label: 'Relatórios' },
-            ].map(item => {
+              { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard',   perm: 'view_dashboard' as keyof AdminPermissions },
+              { id: 'orders',    icon: ShoppingBag,     label: 'Pedidos',     perm: 'view_orders' as keyof AdminPermissions,    badge: newOrderCount > 0 ? newOrderCount : null },
+              { id: 'menu',      icon: UtensilsCrossed, label: 'Cardápio',    perm: 'view_menu' as keyof AdminPermissions },
+              { id: 'coupons',   icon: Ticket,          label: 'Cupons',      perm: 'view_coupons' as keyof AdminPermissions },
+              { id: 'reports',   icon: BarChart2,       label: 'Relatórios',  perm: 'view_reports' as keyof AdminPermissions },
+              ...(profile?.role === 'super_admin' ? [{ id: 'team', icon: Users, label: 'Equipe', perm: 'manage_admins' as keyof AdminPermissions }] : []),
+            ].filter(item => profile?.role === 'super_admin' || profile?.permissions?.[item.perm])
+            .map(item => {
               const Icon = item.icon
               const active = activeTab === item.id
               return (
@@ -317,10 +336,11 @@ export default function AdminPanel() {
         <main style={{ flex: 1, overflowY: 'auto' }}>
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && <DashboardTab key="dashboard" onNavigate={setActiveTab} />}
-            {activeTab === 'orders'    && <OrdersTab    key="orders" />}
-            {activeTab === 'menu'      && <MenuTab      key="menu" />}
-            {activeTab === 'coupons'   && <CouponsTab   key="coupons" />}
+            {activeTab === 'orders'    && <OrdersTab    key="orders" profile={profile!} />}
+            {activeTab === 'menu'      && <MenuTab      key="menu"   profile={profile!} />}
+            {activeTab === 'coupons'   && <CouponsTab   key="coupons" profile={profile!} />}
             {activeTab === 'reports'   && <ReportsTab   key="reports" />}
+            {activeTab === 'team'      && profile?.role === 'super_admin' && <TeamTab key="team" />}
           </AnimatePresence>
         </main>
       </div>
@@ -632,7 +652,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: any) => void }) {
 
 // ─── ORDERS TAB ───────────────────────────────────────────────
 
-function OrdersTab() {
+function OrdersTab({ profile }: { profile: Profile }) {
   const [orders, setOrders] = useState<Order[]>([])
   const [selected, setSelected] = useState<Order | null>(null)
   const [filterStatus, setFilterStatus] = useState('all')
@@ -774,7 +794,7 @@ function OrdersTab() {
         <div>
           <AnimatePresence>
             {selected ? (
-              <OrderDetail key={selected.id} order={selected} onAdvance={advanceStatus} onClose={() => setSelected(null)} onRefresh={fetchOrders} />
+              <OrderDetail key={selected.id} order={selected} onAdvance={advanceStatus} onClose={() => setSelected(null)} onRefresh={fetchOrders} profile={profile} />
             ) : (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -801,8 +821,8 @@ function OrdersTab() {
 
 // ─── ORDER DETAIL ─────────────────────────────────────────────
 
-function OrderDetail({ order, onAdvance, onClose, onRefresh }: {
-  order: Order; onAdvance: (o: Order) => void; onClose: () => void; onRefresh: () => void
+function OrderDetail({ order, onAdvance, onClose, onRefresh, profile }: {
+  order: Order; onAdvance: (o: Order) => void; onClose: () => void; onRefresh: () => void; profile: Profile
 }) {
   const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
   const nextCfg = cfg.next ? STATUS_CONFIG[cfg.next] : null
@@ -851,7 +871,7 @@ function OrderDetail({ order, onAdvance, onClose, onRefresh }: {
           <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Status:</span>
           <StatusBadge status={order.status} />
         </div>
-        {nextCfg && (
+        {nextCfg && profile.permissions?.manage_orders && (
           <button
             onClick={() => onAdvance(order)}
             style={{
@@ -1090,7 +1110,7 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
 
 // ─── MENU TAB ─────────────────────────────────────────────────
 
-function MenuTab() {
+function MenuTab({ profile }: { profile: Profile }) {
   const [items, setItems] = useState<MenuItem[]>([])
   const [editing, setEditing] = useState<MenuItem | null>(null)
   const [isNew, setIsNew] = useState(false)
@@ -1134,9 +1154,11 @@ function MenuTab() {
       title="Cardápio"
       subtitle="NOSSO sabor, SEU ponto de encontro"
       action={
-        <GoldButton onClick={handleNew}>
-          <Plus size={14} /> Novo Item
-        </GoldButton>
+        profile.permissions?.manage_menu ? (
+          <GoldButton onClick={handleNew}>
+            <Plus size={14} /> Novo Item
+          </GoldButton>
+        ) : undefined
       }
     >
       {/* Category filter */}
@@ -1223,43 +1245,29 @@ function MenuTab() {
                   {item.weight_options.length} faixa{item.weight_options.length > 1 ? 's' : ''} de peso
                 </div>
               )}
-              <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
-                <button
-                  onClick={() => { setEditing(item); setIsNew(false) }}
-                  style={{
-                    flex: 1, padding: '7px', borderRadius: '6px',
-                    background: 'rgba(255,240,222,0.05)', border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-muted)', cursor: 'pointer', fontSize: '11px',
-                    fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s'
-                  }}
-                >
-                  <Edit2 size={11} /> Editar
-                </button>
-                <button
-                  onClick={() => handleToggleAvailable(item)}
-                  style={{
-                    flex: 1, padding: '7px', borderRadius: '6px',
-                    background: 'rgba(255,240,222,0.05)', border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-muted)', cursor: 'pointer', fontSize: '11px',
-                    fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s'
-                  }}
-                >
-                  {item.available ? <ToggleRight size={11} style={{ color: '#5dba75' }} /> : <ToggleLeft size={11} style={{ color: 'var(--brand-red)' }} />}
-                  {item.available ? 'Desativar' : 'Ativar'}
-                </button>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  style={{
-                    padding: '7px 10px', borderRadius: '6px',
-                    background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.2)',
-                    color: 'var(--brand-red)', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s'
-                  }}
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
+              {profile.permissions?.manage_menu && (
+                <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
+                  <button
+                    onClick={() => { setEditing(item); setIsNew(false) }}
+                    ...
+                  >
+                    <Edit2 size={11} /> Editar
+                  </button>
+                  <button
+                    onClick={() => handleToggleAvailable(item)}
+                    ...
+                  >
+                    {item.available ? <ToggleRight .../>  : <ToggleLeft .../>}
+                    {item.available ? 'Desativar' : 'Ativar'}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    ...
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -1588,7 +1596,7 @@ function MenuItemModal({ item, isNew, onClose, onSave }: {
 
 // ─── COUPONS TAB ──────────────────────────────────────────────
 
-function CouponsTab() {
+function CouponsTab({ profile }: { profile: Profile }) {
   const [subTab, setSubTab] = useState<'fidelity' | 'manual' | 'validate'>('fidelity')
 
   return (
@@ -1618,7 +1626,7 @@ function CouponsTab() {
       </div>
 
       {subTab === 'fidelity' && <FidelityCouponsSubTab />}
-      {subTab === 'manual' && <ManualCouponsSubTab />}
+      {subTab === 'manual' && <ManualCouponsSubTab canManage={!!profile.permissions?.manage_coupons} />}
       {subTab === 'validate' && <ValidateCouponSubTab />}
     </Page>
   )
@@ -1729,7 +1737,7 @@ function FidelityCouponsSubTab() {
 
 // ─── MANUAL COUPONS ───────────────────────────────────────────
 
-function ManualCouponsSubTab() {
+function ManualCouponsSubTab({ canManage }: { canManage: boolean }) {
   const [coupons, setCoupons] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -1793,11 +1801,13 @@ function ManualCouponsSubTab() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-        <GoldButton onClick={() => setShowForm(v => !v)} small>
-          <Plus size={13} /> {showForm ? 'Cancelar' : 'Novo Cupom'}
-        </GoldButton>
-      </div>
+      {canManage && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+          <GoldButton onClick={() => setShowForm(v => !v)} small>
+            <Plus size={13} /> {showForm ? 'Cancelar' : 'Novo Cupom'}
+          </GoldButton>
+        </div>
+      )}
 
       {showForm && (
         <div style={{
@@ -2277,6 +2287,332 @@ function ReportsTab() {
           </div>
         </SectionCard>
       </div>
+    </Page>
+  )
+}
+
+// ─── TEAM TAB (só super_admin) ────────────────────────────────
+
+const ALL_PERMISSIONS: { key: keyof AdminPermissions; label: string; group: string }[] = [
+  { key: 'view_dashboard',   label: 'Ver Dashboard',      group: 'Dashboard' },
+  { key: 'view_orders',      label: 'Ver Pedidos',         group: 'Pedidos' },
+  { key: 'manage_orders',    label: 'Gerenciar Pedidos',   group: 'Pedidos' },
+  { key: 'view_menu',        label: 'Ver Cardápio',        group: 'Cardápio' },
+  { key: 'manage_menu',      label: 'Editar Cardápio',     group: 'Cardápio' },
+  { key: 'view_coupons',     label: 'Ver Cupons',          group: 'Cupons' },
+  { key: 'manage_coupons',   label: 'Gerenciar Cupons',    group: 'Cupons' },
+  { key: 'view_reports',     label: 'Ver Relatórios',      group: 'Relatórios' },
+]
+
+function TeamTab() {
+  const [admins, setAdmins] = useState<Profile[]>([])
+  const [searchEmail, setSearchEmail] = useState('')
+  const [searchResult, setSearchResult] = useState<Profile | null>(null)
+  const [searchError, setSearchError] = useState('')
+  const [editing, setEditing] = useState<Profile | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const fetchAdmins = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('role', ['admin', 'super_admin'])
+      .order('full_name')
+    setAdmins(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchAdmins() }, [])
+
+  const handleSearch = async () => {
+    setSearchResult(null)
+    setSearchError('')
+    if (!searchEmail.trim()) return
+
+    // Busca via auth.users pelo email usando service (profiles não tem email)
+    // Alternativa: busca na tabela profiles por email se você tiver essa coluna
+    // Como profiles tem só id/full_name/role, buscamos pelo email no auth e cruzamos
+    const { data: authData, error } = await supabase
+      .rpc('get_user_by_email', { email_input: searchEmail.trim().toLowerCase() })
+
+    if (error || !authData || authData.length === 0) {
+      setSearchError('Usuário não encontrado. Verifique o e-mail.')
+      return
+    }
+
+    const userId = authData[0].id
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (!profile) {
+      setSearchError('Perfil não encontrado para este e-mail.')
+      return
+    }
+
+    if (profile.role === 'super_admin') {
+      setSearchError('Este usuário é super_admin e não pode ser editado aqui.')
+      return
+    }
+
+    setSearchResult(profile)
+    setEditing({ ...profile, permissions: profile.permissions ?? {} })
+  }
+
+  const handleTogglePerm = (key: keyof AdminPermissions) => {
+    if (!editing) return
+    setEditing(e => ({
+      ...e!,
+      permissions: { ...e!.permissions, [key]: !e!.permissions?.[key] }
+    }))
+  }
+
+  const handleSave = async () => {
+    if (!editing) return
+    setSaving(true)
+    await supabase
+      .from('profiles')
+      .update({
+        role: 'admin',
+        permissions: editing.permissions
+      })
+      .eq('id', editing.id)
+    setSaving(false)
+    setSearchResult(null)
+    setSearchEmail('')
+    setEditing(null)
+    fetchAdmins()
+  }
+
+  const handleRemoveAdmin = async (id: string) => {
+    if (!confirm('Remover acesso de admin deste usuário?')) return
+    await supabase
+      .from('profiles')
+      .update({ role: 'user', permissions: {} })
+      .eq('id', id)
+    fetchAdmins()
+  }
+
+  const groups = [...new Set(ALL_PERMISSIONS.map(p => p.group))]
+
+  return (
+    <Page
+      title="Equipe"
+      subtitle="Gerencie os administradores e suas permissões"
+    >
+      {/* Buscar usuário */}
+      <SectionCard style={{ marginBottom: '24px' }}>
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-primary)' }}>
+            Adicionar ou Editar Admin
+          </h3>
+        </div>
+        <div style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+            <input
+              value={searchEmail}
+              onChange={e => setSearchEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              placeholder="E-mail do usuário..."
+              style={{ flex: 1, padding: '10px 14px', fontSize: '13px' }}
+            />
+            <GoldButton onClick={handleSearch} small>
+              <Search size={13} /> Buscar
+            </GoldButton>
+          </div>
+
+          {searchError && (
+            <div style={{ color: 'var(--brand-red)', fontSize: '12px', padding: '10px 14px', background: 'rgba(183,53,39,0.08)', borderRadius: '8px', border: '1px solid rgba(183,53,39,0.2)' }}>
+              {searchError}
+            </div>
+          )}
+
+          {editing && searchResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ background: 'rgba(199,173,112,0.05)', border: '1px solid var(--border-medium)', borderRadius: '12px', padding: '18px' }}
+            >
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+                  {editing.full_name || 'Usuário sem nome'}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                  {searchEmail}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '18px' }}>
+                {groups.map(group => (
+                  <div key={group}>
+                    <div style={{ fontSize: '10px', fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--brand-gold)', marginBottom: '8px' }}>
+                      {group}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {ALL_PERMISSIONS.filter(p => p.group === group).map(perm => {
+                        const checked = !!editing.permissions?.[perm.key]
+                        return (
+                          <label
+                            key={perm.key}
+                            onClick={() => handleTogglePerm(perm.key)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '10px',
+                              cursor: 'pointer', padding: '8px 12px', borderRadius: '8px',
+                              background: checked ? 'rgba(93,186,117,0.08)' : 'rgba(255,240,222,0.03)',
+                              border: `1px solid ${checked ? 'rgba(93,186,117,0.25)' : 'var(--border-subtle)'}`,
+                              transition: 'all 0.15s', userSelect: 'none'
+                            }}
+                          >
+                            <div style={{
+                              width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0,
+                              background: checked ? '#5dba75' : 'transparent',
+                              border: `2px solid ${checked ? '#5dba75' : 'var(--border-medium)'}`,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              transition: 'all 0.15s'
+                            }}>
+                              {checked && (
+                                <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                                  <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: checked ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                              {perm.label}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <GhostButton onClick={() => { setSearchResult(null); setEditing(null); setSearchEmail('') }} small>
+                  Cancelar
+                </GhostButton>
+                <GoldButton onClick={handleSave} disabled={saving} small>
+                  <Save size={13} /> {saving ? 'Salvando...' : 'Salvar Permissões'}
+                </GoldButton>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </SectionCard>
+
+      {/* Lista de admins existentes */}
+      <SectionCard>
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-primary)' }}>
+            Admins Ativos
+          </h3>
+        </div>
+        <div>
+          {loading && (
+            <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
+              Carregando...
+            </div>
+          )}
+          {!loading && admins.length === 0 && (
+            <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
+              Nenhum admin cadastrado além de você.
+            </div>
+          )}
+          {admins.map((admin, i) => {
+            const perms = admin.permissions ?? {}
+            const activePerms = ALL_PERMISSIONS.filter(p => perms[p.key])
+            return (
+              <div
+                key={admin.id}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '14px',
+                  padding: '16px 20px',
+                  borderBottom: i < admins.length - 1 ? '1px solid var(--border-subtle)' : 'none'
+                }}
+              >
+                <div style={{
+                  width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
+                  background: admin.role === 'super_admin' ? 'rgba(199,173,112,0.2)' : 'rgba(183,53,39,0.15)',
+                  border: `1px solid ${admin.role === 'super_admin' ? 'rgba(199,173,112,0.4)' : 'rgba(183,53,39,0.3)'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-display)',
+                  color: admin.role === 'super_admin' ? 'var(--brand-gold)' : 'var(--brand-red)'
+                }}>
+                  {admin.full_name?.[0]?.toUpperCase() ?? '?'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+                      {admin.full_name}
+                    </span>
+                    <span style={{
+                      padding: '2px 8px', borderRadius: '20px', fontSize: '9px',
+                      fontWeight: 700, fontFamily: 'var(--font-display)', textTransform: 'uppercase', letterSpacing: '0.5px',
+                      color: admin.role === 'super_admin' ? 'var(--brand-gold)' : 'var(--text-muted)',
+                      background: admin.role === 'super_admin' ? 'rgba(199,173,112,0.15)' : 'rgba(255,240,222,0.06)',
+                      border: `1px solid ${admin.role === 'super_admin' ? 'rgba(199,173,112,0.3)' : 'var(--border-subtle)'}`
+                    }}>
+                      {admin.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                    </span>
+                  </div>
+                  {admin.role !== 'super_admin' && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      {activePerms.length === 0 && (
+                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Nenhuma permissão ativa</span>
+                      )}
+                      {activePerms.map(p => (
+                        <span key={p.key} style={{
+                          fontSize: '10px', padding: '2px 8px', borderRadius: '20px',
+                          background: 'rgba(93,186,117,0.08)', color: '#5dba75',
+                          border: '1px solid rgba(93,186,117,0.2)',
+                          fontFamily: 'var(--font-display)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px'
+                        }}>
+                          {p.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {admin.role !== 'super_admin' && (
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    <button
+                      onClick={() => {
+                        setSearchEmail('(editar direto)')
+                        setSearchResult(admin)
+                        setEditing({ ...admin, permissions: admin.permissions ?? {} })
+                      }}
+                      style={{
+                        padding: '6px 12px', borderRadius: '6px',
+                        background: 'transparent', border: '1px solid var(--border-medium)',
+                        color: 'var(--text-muted)', cursor: 'pointer', fontSize: '11px',
+                        fontFamily: 'var(--font-display)', fontWeight: 700, textTransform: 'uppercase',
+                        display: 'flex', alignItems: 'center', gap: '4px'
+                      }}
+                    >
+                      <Edit2 size={11} /> Editar
+                    </button>
+                    <button
+                      onClick={() => handleRemoveAdmin(admin.id)}
+                      style={{
+                        padding: '6px 10px', borderRadius: '6px',
+                        background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.25)',
+                        color: 'var(--brand-red)', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center'
+                      }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </SectionCard>
     </Page>
   )
 }
