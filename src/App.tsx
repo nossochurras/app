@@ -278,6 +278,7 @@ export default function App() {
   const [awaitingWeighingOrderId, setAwaitingWeighingOrderId] = useState<string | null>(null);
   const [weighedTotal, setWeighedTotal] = useState<number | null>(null);
   const [profileInitialSubView, setProfileInitialSubView] = useState<'main' | 'orders' | 'coupons'>('main');
+  const [inAppNotification, setInAppNotification] = useState<{ title: string; body: string; onTap: () => void } | null>(null);;
   
   const checkRole = React.useCallback(async (userId: string) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -497,6 +498,35 @@ export default function App() {
   return (
     <div className="font-sans min-h-screen bg-brand-cream text-brand-dark selection:bg-brand-red selection:text-white pb-safe max-w-md mx-auto shadow-2xl relative bg-[url('https://www.transparenttextures.com/patterns/rice-paper-2.png')] overflow-hidden">
       
+      {/* BANNER DE NOTIFICAÇÃO IN-APP */}
+      <AnimatePresence>
+        {inAppNotification && (
+          <motion.div
+            initial={{ y: -120, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -120, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            onClick={() => {
+              inAppNotification.onTap();
+              setInAppNotification(null);
+            }}
+            className="fixed top-4 left-4 right-4 z-[999] max-w-md mx-auto cursor-pointer"
+            style={{ left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 32px)', maxWidth: '420px', position: 'fixed' }}
+          >
+            <div className="bg-brand-dark text-brand-cream rounded-2xl shadow-2xl flex items-center gap-4 px-5 py-4 border border-brand-gold/30">
+              <div className="w-11 h-11 bg-green-500 rounded-xl flex items-center justify-center shrink-0">
+                <CheckCircle size={22} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-sm text-brand-cream leading-tight">{inAppNotification.title}</div>
+                <div className="text-xs text-brand-cream/60 mt-0.5 leading-tight truncate">{inAppNotification.body}</div>
+              </div>
+              <div className="text-brand-gold/50 text-[10px] font-bold uppercase tracking-wider shrink-0">Toque</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <BranchTransition isVisible={loginAnim} />
 
       {/* MODAL SELEÇÃO DE FAIXA DE PESO */}
@@ -1013,7 +1043,7 @@ export default function App() {
         )}
 
         {/* AWAITING WEIGHING SCREEN */}
-        {view === 'awaiting_weighing' && awaitingWeighingOrderId && (
+       {view === 'awaiting_weighing' && awaitingWeighingOrderId && (
           <AwaitingWeighingScreen
             key="awaiting_weighing"
             orderId={awaitingWeighingOrderId}
@@ -1024,8 +1054,19 @@ export default function App() {
               setView('checkout');
             }}
             onTimeout={() => {
-              setProfileInitialSubView('orders');  // abre direto em Meus Pedidos
+              setProfileInitialSubView('orders');
               setView('profile');
+            }}
+            onWeighingNotify={(code: string) => {
+              setInAppNotification({
+                title: '✅ Pesagem concluída!',
+                body: `Pedido #${code} pesado. Toque para ir ao pagamento.`,
+                onTap: () => {
+                  // já está na tela awaiting_weighing, não precisa navegar
+                },
+              });
+              // auto-dismiss após 6 segundos
+              setTimeout(() => setInAppNotification(null), 6000);
             }}
           />
         )}
@@ -1117,12 +1158,14 @@ function AwaitingWeighingScreen({
   location,
   onConfirmed,
   onTimeout,
+  onWeighingNotify,
 }: {
   orderId: string
   orderCode: string
   location: string
   onConfirmed: (finalPrice: number) => void
   onTimeout: () => void
+  onWeighingNotify: (orderCode: string) => void
 }) {
   const [notification, setNotification] = useState<{
     message: string
@@ -1177,31 +1220,8 @@ function AwaitingWeighingScreen({
               .then(({ data }) => {
                 if (data) {
                   setNotification(data);
-                  // Notificação nativa (iOS Safari / PWA)
-                  if ('Notification' in window) {
-                    if (Notification.permission === 'granted') {
-                      new Notification('Pesagem concluída! ✅', {
-                        body: `Seu pedido #${orderCode} foi pesado. Toque para confirmar.`,
-                        icon: '/logo.png',
-                        tag: `weighing-${orderId}`,
-                      });
-                    } else if (Notification.permission === 'default') {
-                      Notification.requestPermission().then(permission => {
-                        if (permission === 'granted') {
-                          new Notification('Pesagem concluída! ✅', {
-                            body: `Seu pedido #${orderCode} foi pesado. Toque para confirmar.`,
-                            icon: '/logo.png',
-                            tag: `weighing-${orderId}`,
-                          });
-                        }
-                      });
-                    }
-                  }
+                  onWeighingNotify(orderCode);
                 }
-              });
-          }
-        }
-      )
       .subscribe();
 
     return () => { supabase.removeChannel(statusChannel); };
