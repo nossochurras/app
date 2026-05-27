@@ -1104,26 +1104,37 @@ function AwaitingWeighingScreen({
       .then(({ data }) => {
         if (data) setNotification(data);
       });
-
-    const channel = supabase
-      .channel(`weighing-${orderId}`)
+  
+    const statusChannel = supabase
+      .channel(`order-status-${orderId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: 'UPDATE',
           schema: 'public',
-          table: 'order_notifications',
-          filter: `order_id=eq.${orderId}`,
+          table: 'orders',
+          filter: `id=eq.${orderId}`,
         },
         (payload) => {
-          setNotification(payload.new as any);
+          if (payload.new.status === 'weighing_done') {
+            supabase
+              .from('order_notifications')
+              .select('*')
+              .eq('order_id', orderId)
+              .eq('type', 'weight_update')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (data) setNotification(data);
+              });
+          }
         }
       )
       .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+  
+    return () => { supabase.removeChannel(statusChannel); };
   }, [orderId]);
-
   const handleConfirm = async () => {
     setConfirmed(true);
     onConfirmed(notification?.final_price ?? 0);
