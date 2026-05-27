@@ -795,7 +795,7 @@ export default function App() {
 
               <button
                 onClick={() => setView('profile')}
-                className="group relative bg-transparent border-2 border-brand-dark/30 text-brand-dark text-base font-bold uppercase tracking-wider py-3 px-12 md:px-16 rounded-full hover:border-brand-dark hover:bg-brand-dark/5 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center gap-2"
+                className="group relative bg-transparent border-2 border-brand-dark/30 text-brand-dark text-base font-bold uppercase tracking-wider py-3 px-12 md:px-16 rounded-full hover:border-brand-dark hover:bg-brand-dark/5 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center gap-2 mt-3"
               >
                 <User size={18} />
                 <span>Minha Conta</span>
