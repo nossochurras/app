@@ -988,6 +988,11 @@ export default function App() {
             onCoupons={() => setView('coupons')}
             onProfile={() => setView('profile')}
             onSupport={() => setView('support')}
+            onGoToCheckout={(orderId: string, finalPrice: number) => {
+              setAwaitingWeighingOrderId(orderId);
+              setWeighedTotal(finalPrice);
+              setView('checkout');
+            }}
           />
         )}
 
@@ -1015,6 +1020,10 @@ export default function App() {
             onConfirmed={async (finalPrice: number) => {
               setWeighedTotal(finalPrice);
               setView('checkout');
+            }}
+            onTimeout={() => {
+              // Fecha a tela de espera e manda para Meus Pedidos
+              setView('profile');
             }}
           />
         )}
@@ -1105,21 +1114,31 @@ function AwaitingWeighingScreen({
   orderCode,
   location,
   onConfirmed,
+  onTimeout,
 }: {
   orderId: string
   orderCode: string
   location: string
   onConfirmed: (finalPrice: number) => void
+  onTimeout: () => void
 }) {
   const [notification, setNotification] = useState<{
     message: string
     photo_url: string | null
     real_grams: number
     final_price: number
+    order_total?: number
   } | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(20);
+  const notificationRef = React.useRef(notification);
+
+  React.useEffect(() => {
+    notificationRef.current = notification;
+  }, [notification]);
 
   useEffect(() => {
+    // Busca notificação já existente
     supabase
       .from('order_notifications')
       .select('*')
@@ -1131,7 +1150,8 @@ function AwaitingWeighingScreen({
       .then(({ data }) => {
         if (data) setNotification(data);
       });
-  
+
+    // Escuta mudança de status em tempo real
     const statusChannel = supabase
       .channel(`order-status-${orderId}`)
       .on(
@@ -1159,9 +1179,31 @@ function AwaitingWeighingScreen({
         }
       )
       .subscribe();
-  
+
     return () => { supabase.removeChannel(statusChannel); };
   }, [orderId]);
+
+  // Countdown de 20 segundos — se expirar sem notificação, vai para Meus Pedidos
+  useEffect(() => {
+    if (notification) return; // pesagem chegou, cancela o countdown
+
+    const interval = setInterval(() => {
+      setSecondsLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          // Só redireciona se a notificação ainda não chegou
+          if (!notificationRef.current) {
+            onTimeout();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [notification, onTimeout]);
+
   const handleConfirm = async () => {
     setConfirmed(true);
     onConfirmed(notification?.order_total ?? notification?.final_price ?? 0);
@@ -1216,15 +1258,22 @@ function AwaitingWeighingScreen({
             </div>
           </div>
 
-          <div className="flex gap-1.5 mt-2">
-            {[0, 1, 2].map(i => (
-              <motion.div
-                key={i}
-                className="w-2 h-2 bg-brand-red rounded-full"
-                animate={{ opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.4 }}
-              />
-            ))}
+          <div className="flex flex-col items-center gap-3 mt-2">
+            <div className="flex gap-1.5">
+              {[0, 1, 2].map(i => (
+                <motion.div
+                  key={i}
+                  className="w-2 h-2 bg-brand-red rounded-full"
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.4 }}
+                />
+              ))}
+            </div>
+            <p className="text-xs text-brand-dark/40 font-medium">
+              {secondsLeft > 0
+                ? `Redirecionando para Meus Pedidos em ${secondsLeft}s caso não haja resposta`
+                : 'Redirecionando...'}
+            </p>
           </div>
         </div>
       ) : (
@@ -1779,7 +1828,7 @@ function BottomNav({ activeTab, cartCount, onNavigate }: { activeTab: string, ca
   );
 }
 
-function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCart, onHome, onCoupons, onProfile, onSupport }: any) {
+function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCart, onHome, onCoupons, onProfile, onSupport, onGoToCheckout }: any) {
   const [subView, setSubView] = useState<'main' | 'orders' | 'coupons' | 'payments' | 'fidelity'>(initialSubView);
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário';
   const initials = displayName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase();
@@ -1806,7 +1855,7 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
           </h2>
         </div>
         
-        {subView === 'orders' && <OrdersSubView userId={user?.id} />}
+       {subView === 'orders' && <OrdersSubView userId={user?.id} onGoToCheckout={onGoToCheckout} />}
         {subView === 'coupons' && <CouponsSubView userId={user?.id} />}
         {subView === 'payments' && (
            <div className="space-y-4">
@@ -2074,9 +2123,12 @@ function FidelitySubView({ userId }: { userId?: string }) {
   );
 }
 
-function OrdersSubView({ userId }: { userId?: string }) {
+function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToCheckout?: (orderId: string, finalPrice: number) => void }) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [weighingData, setWeighingData] = useState<Record<string, any>>({});
+  const [loadingNotif, setLoadingNotif] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) { setLoading(false); return; }
@@ -2090,6 +2142,55 @@ function OrdersSubView({ userId }: { userId?: string }) {
         setLoading(false);
       });
   }, [userId]);
+
+  // Escuta atualizações em tempo real nos pedidos do usuário
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`user-orders-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          setOrders(prev =>
+            prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o)
+          );
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId]);
+
+  const handleExpandOrder = async (order: any) => {
+    const isExpanding = expandedOrderId !== order.id;
+    setExpandedOrderId(isExpanding ? order.id : null);
+
+    // Se for um pedido com pesagem e ainda não carregamos a notificação
+    if (
+      isExpanding &&
+      (order.status === 'weighing_done' || order.status === 'awaiting_weighing') &&
+      !weighingData[order.id]
+    ) {
+      setLoadingNotif(order.id);
+      const { data } = await supabase
+        .from('order_notifications')
+        .select('*')
+        .eq('order_id', order.id)
+        .eq('type', 'weight_update')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        setWeighingData(prev => ({ ...prev, [order.id]: data }));
+      }
+      setLoadingNotif(null);
+    }
+  };
 
   if (loading) return <p className="text-center text-brand-dark/50 mt-8">Carregando...</p>;
 
@@ -2110,35 +2211,165 @@ function OrdersSubView({ userId }: { userId?: string }) {
           day: '2-digit', month: 'short', year: 'numeric'
         });
         const isRetirada = order.location === 'Retirada no Balcão';
+        const isAwaitingWeighing = order.status === 'awaiting_weighing';
+        const isWeighingDone = order.status === 'weighing_done';
+        const isExpanded = expandedOrderId === order.id;
+        const notif = weighingData[order.id];
+
+        const statusLabel = 
+          order.status === 'pending' ? 'Em andamento' :
+          order.status === 'awaiting_weighing' ? 'Aguard. Pesagem' :
+          order.status === 'weighing_done' ? 'Pesagem OK' :
+          order.status === 'preparing' ? 'Preparando' :
+          order.status === 'ready' ? 'Pronto!' :
+          order.status === 'delivered' ? 'Entregue' :
+          order.status === 'paid' ? 'Pago' :
+          order.status;
+
+        const statusClass =
+          isAwaitingWeighing ? 'bg-brand-red/10 text-brand-red' :
+          isWeighingDone ? 'bg-yellow-100 text-yellow-700' :
+          order.status === 'delivered' || order.status === 'paid' ? 'bg-green-100 text-green-700' :
+          'bg-yellow-100 text-yellow-700';
+
         return (
-          <div key={order.id} className="bg-white p-5 rounded-2xl shadow-sm border border-brand-gold/20">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="font-bold text-brand-dark text-lg">
-                  {isRetirada ? `Código: ${order.order_code}` : `Pedido #${order.order_code}`}
+          <motion.div
+            key={order.id}
+            layout
+            className="bg-white rounded-2xl shadow-sm border border-brand-gold/20 overflow-hidden"
+          >
+            {/* Cabeçalho clicável */}
+            <button
+              onClick={() => handleExpandOrder(order)}
+              className="w-full p-5 text-left"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="font-bold text-brand-dark text-lg">
+                    {isRetirada ? `Código: ${order.order_code}` : `Pedido #${order.order_code}`}
+                  </div>
+                  <div className="text-sm text-brand-dark/60 mt-0.5">{date}</div>
                 </div>
-                <div className="text-sm text-brand-dark/60 mt-0.5">{date}</div>
+                <div className={`font-bold text-[10px] px-3 py-1.5 rounded-md tracking-wider uppercase flex items-center gap-1.5 ${statusClass}`}>
+                  {isAwaitingWeighing && (
+                    <motion.span
+                      className="inline-block w-1.5 h-1.5 rounded-full bg-brand-red"
+                      animate={{ opacity: [1, 0.2, 1] }}
+                      transition={{ duration: 1.2, repeat: Infinity }}
+                    />
+                  )}
+                  {statusLabel}
+                </div>
               </div>
-              <div className="bg-yellow-100 text-yellow-700 font-bold text-[10px] px-3 py-1.5 rounded-md tracking-wider uppercase">
-                {order.status === 'pending' ? 'Em andamento' :
-                 order.status === 'awaiting_weighing' ? 'Aguardando pesagem' :
-                 order.status === 'preparing' ? 'Preparando' :
-                 order.status}
+              <div className="text-xs text-brand-dark/50 mb-1 flex items-center gap-1">
+                <MapPin size={11} /> {order.location}
               </div>
-            </div>
-            <div className="text-xs text-brand-dark/50 mb-1 flex items-center gap-1">
-              <MapPin size={11} /> {order.location}
-            </div>
-            <div className="border-t border-brand-gold/10 pt-3 mt-3 flex justify-between items-center">
-              <span className="text-xs text-brand-dark/50">
-                {(order.items as any[]).length} {(order.items as any[]).length === 1 ? 'item' : 'itens'} •{' '}
-                {order.payment_type === 'app' ? 'Pago pelo App' : 'Pagar no Local'}
-              </span>
-              <span className="font-display text-brand-red text-lg">
-                R$ {Number(order.total).toFixed(2).replace('.', ',')}
-              </span>
-            </div>
-          </div>
+              <div className="border-t border-brand-gold/10 pt-3 mt-3 flex justify-between items-center">
+                <span className="text-xs text-brand-dark/50">
+                  {(order.items as any[]).length} {(order.items as any[]).length === 1 ? 'item' : 'itens'} •{' '}
+                  {order.payment_type === 'app' ? 'Pago pelo App' : 'Pagar no Local'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-brand-red text-lg">
+                    R$ {Number(order.total).toFixed(2).replace('.', ',')}
+                  </span>
+                  <ChevronRight
+                    size={16}
+                    className={`text-brand-dark/30 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                  />
+                </div>
+              </div>
+            </button>
+
+            {/* Painel expandido — detalhes e ação de pesagem */}
+            <AnimatePresence>
+              {isExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-5 pb-5 border-t border-brand-gold/10 pt-4 space-y-3">
+
+                    {/* Itens do pedido */}
+                    <div className="space-y-2">
+                      {(order.items as any[]).map((item: any, i: number) => (
+                        <div key={i} className="flex justify-between items-start text-sm">
+                          <div>
+                            <span className="font-medium text-brand-dark">{item.name}</span>
+                            {item.chosen_label && (
+                              <span className="text-xs text-brand-dark/50 ml-1">({item.chosen_label})</span>
+                            )}
+                            <span className="text-brand-dark/40 ml-1">x{item.quantity}</span>
+                          </div>
+                          <span className="text-brand-dark font-bold">
+                            R$ {(Number(item.final_price ?? item.price) * item.quantity).toFixed(2).replace('.', ',')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Bloco de pesagem — só aparece se há itens por peso */}
+                    {(isAwaitingWeighing || isWeighingDone) && (
+                      <div className={`rounded-2xl p-4 ${isWeighingDone ? 'bg-green-50 border border-green-200' : 'bg-brand-red/5 border border-brand-red/20'}`}>
+                        {loadingNotif === order.id ? (
+                          <p className="text-xs text-brand-dark/50 text-center py-2">Carregando dados da pesagem...</p>
+                        ) : isAwaitingWeighing && !notif ? (
+                          <div className="flex items-center gap-2">
+                            <motion.div
+                              className="w-2 h-2 rounded-full bg-brand-red"
+                              animate={{ opacity: [1, 0.2, 1] }}
+                              transition={{ duration: 1.2, repeat: Infinity }}
+                            />
+                            <p className="text-xs text-brand-red font-bold">Aguardando pesagem pelo atendente...</p>
+                          </div>
+                        ) : notif ? (
+                          <>
+                            {notif.photo_url && (
+                              <img
+                                src={notif.photo_url}
+                                alt="Foto da balança"
+                                className="w-full rounded-xl object-cover max-h-40 mb-3"
+                              />
+                            )}
+                            <div className="space-y-1.5 mb-4">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-brand-dark/60">Peso real</span>
+                                <span className="font-bold text-brand-dark">{notif.real_grams}g</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-brand-dark/60">Valor da carne</span>
+                                <span className="font-bold text-brand-dark">
+                                  R$ {Number(notif.final_price).toFixed(2).replace('.', ',')}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-sm border-t border-brand-gold/20 pt-1.5 mt-1.5">
+                                <span className="font-bold text-brand-dark">Total do pedido</span>
+                                <span className="font-display text-lg text-brand-red">
+                                  R$ {Number(notif.order_total ?? notif.final_price).toFixed(2).replace('.', ',')}
+                                </span>
+                              </div>
+                            </div>
+                            {isWeighingDone && onGoToCheckout && (
+                              <button
+                                onClick={() => onGoToCheckout(order.id, Number(notif.order_total ?? notif.final_price))}
+                                className="w-full bg-brand-red text-white py-3 rounded-xl font-bold text-sm tracking-wide hover:bg-red-700 transition active:scale-[0.98] shadow-md"
+                              >
+                                Ir para Pagamento →
+                              </button>
+                            )}
+                          </>
+                        ) : null}
+                      </div>
+                    )}
+
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         );
       })}
     </div>
