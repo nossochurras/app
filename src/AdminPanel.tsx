@@ -1249,20 +1249,36 @@ function MenuTab({ profile }: { profile: Profile }) {
                 <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
                   <button
                     onClick={() => { setEditing(item); setIsNew(false) }}
-                    ...
+                    style={{
+                      flex: 1, padding: '7px', borderRadius: '6px',
+                      background: 'rgba(255,240,222,0.05)', border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-muted)', cursor: 'pointer', fontSize: '11px',
+                      fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s'
+                    }}
                   >
                     <Edit2 size={11} /> Editar
                   </button>
                   <button
                     onClick={() => handleToggleAvailable(item)}
-                    ...
+                    style={{
+                      flex: 1, padding: '7px', borderRadius: '6px',
+                      background: 'rgba(255,240,222,0.05)', border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-muted)', cursor: 'pointer', fontSize: '11px',
+                      fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', transition: 'all 0.15s'
+                    }}
                   >
-                    {item.available ? <ToggleRight .../>  : <ToggleLeft .../>}
+                    {item.available ? <ToggleRight size={11} style={{ color: '#5dba75' }} /> : <ToggleLeft size={11} style={{ color: 'var(--brand-red)' }} />}
                     {item.available ? 'Desativar' : 'Ativar'}
                   </button>
                   <button
                     onClick={() => handleDelete(item.id)}
-                    ...
+                    style={{
+                      padding: '7px 10px', borderRadius: '6px',
+                      background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.2)',
+                      color: 'var(--brand-red)', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s'
+                    }}
                   >
                     <Trash2 size={12} />
                   </button>
