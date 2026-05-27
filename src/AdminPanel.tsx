@@ -2350,20 +2350,16 @@ function TeamTab() {
     // Busca via auth.users pelo email usando service (profiles não tem email)
     // Alternativa: busca na tabela profiles por email se você tiver essa coluna
     // Como profiles tem só id/full_name/role, buscamos pelo email no auth e cruzamos
-    const { data: authData, error } = await supabase
-      .rpc('get_user_by_email', { email_input: searchEmail.trim().toLowerCase() })
-
-    if (error || !authData || authData.length === 0) {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', searchEmail.trim().toLowerCase())
+      .maybeSingle()
+    
+    if (error || !profile) {
       setSearchError('Usuário não encontrado. Verifique o e-mail.')
       return
     }
-
-    const userId = authData[0].id
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
 
     if (!profile) {
       setSearchError('Perfil não encontrado para este e-mail.')
