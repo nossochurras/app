@@ -277,6 +277,7 @@ export default function App() {
   const [weightModal, setWeightModal] = useState<DynamicMenuItem | null>(null);
   const [awaitingWeighingOrderId, setAwaitingWeighingOrderId] = useState<string | null>(null);
   const [weighedTotal, setWeighedTotal] = useState<number | null>(null);
+  const [profileInitialSubView, setProfileInitialSubView] = useState<'main' | 'orders' | 'coupons'>('main');
   
   const checkRole = React.useCallback(async (userId: string) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -484,6 +485,7 @@ export default function App() {
   
       if (orderData?.id) {
         setAwaitingWeighingOrderId(orderData.id);
+        setCart([]);           // zera o carrinho: ícone "Pedido" some
         setView('awaiting_weighing');
       }
     }
@@ -981,12 +983,12 @@ export default function App() {
             key={view}
             user={user}
             cartCount={cartCount}
-            initialSubView={view === 'coupons' ? 'coupons' : 'main'}
-            onBack={() => setView('menu')}
+            initialSubView={view === 'coupons' ? 'coupons' : profileInitialSubView}
+            onBack={() => { setProfileInitialSubView('main'); setView('menu'); }}
             onCart={() => setView('cart')}
-            onHome={() => setView('location')}
+            onHome={() => { setProfileInitialSubView('main'); setView('location'); }}
             onCoupons={() => setView('coupons')}
-            onProfile={() => setView('profile')}
+            onProfile={() => { setProfileInitialSubView('main'); setView('profile'); }}
             onSupport={() => setView('support')}
             onGoToCheckout={(orderId: string, finalPrice: number) => {
               setAwaitingWeighingOrderId(orderId);
@@ -1022,7 +1024,7 @@ export default function App() {
               setView('checkout');
             }}
             onTimeout={() => {
-              // Fecha a tela de espera e manda para Meus Pedidos
+              setProfileInitialSubView('orders');  // abre direto em Meus Pedidos
               setView('profile');
             }}
           />
@@ -1173,7 +1175,29 @@ function AwaitingWeighingScreen({
               .limit(1)
               .maybeSingle()
               .then(({ data }) => {
-                if (data) setNotification(data);
+                if (data) {
+                  setNotification(data);
+                  // Notificação nativa (iOS Safari / PWA)
+                  if ('Notification' in window) {
+                    if (Notification.permission === 'granted') {
+                      new Notification('Pesagem concluída! ✅', {
+                        body: `Seu pedido #${orderCode} foi pesado. Toque para confirmar.`,
+                        icon: '/logo.png',
+                        tag: `weighing-${orderId}`,
+                      });
+                    } else if (Notification.permission === 'default') {
+                      Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                          new Notification('Pesagem concluída! ✅', {
+                            body: `Seu pedido #${orderCode} foi pesado. Toque para confirmar.`,
+                            icon: '/logo.png',
+                            tag: `weighing-${orderId}`,
+                          });
+                        }
+                      });
+                    }
+                  }
+                }
               });
           }
         }
