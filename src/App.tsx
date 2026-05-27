@@ -1164,7 +1164,7 @@ function AwaitingWeighingScreen({
   }, [orderId]);
   const handleConfirm = async () => {
     setConfirmed(true);
-    onConfirmed(notification?.final_price ?? 0);
+    onConfirmed(notification?.order_total ?? notification?.final_price ?? 0);
   };
 
   return (
@@ -1254,10 +1254,16 @@ function AwaitingWeighingScreen({
               <span className="text-brand-cream/60 text-sm">Peso real</span>
               <span className="font-bold text-lg">{notification.real_grams}g</span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-brand-cream/60 text-sm">Valor final</span>
-              <span className="font-display text-2xl text-brand-red">
+            <div className="flex justify-between items-center mb-3 pb-3 border-b border-white/10">
+              <span className="text-brand-cream/60 text-sm">Valor da carne</span>
+              <span className="font-bold text-lg">
                 R$ {Number(notification.final_price).toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-brand-cream/60 text-sm">Total do pedido</span>
+              <span className="font-display text-2xl text-brand-red">
+                R$ {Number(notification.order_total ?? notification.final_price).toFixed(2).replace('.', ',')}
               </span>
             </div>
           </div>
