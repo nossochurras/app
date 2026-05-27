@@ -1020,7 +1020,7 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
     await supabase.from('order_notifications').insert({
       order_id: orderId,
       type: 'weight_update',
-      message: `Seu ${item.name} pesou ${realGrams}g.${discount > 0 ? ` Desconto de R$ ${discount.toFixed(2).replace('.', ',')} aplicado!` : ''}`,
+      message: `Seu ${item.name} pesou ${realGrams}g.${discount > 0 ? ` Desconto de R$ ${discount.toFixed(2).replace('.', ',')} aplicado!` : ''} Total do pedido: R$ ${newTotal.toFixed(2).replace('.', ',')}`,
       photo_url: photoUrl,
       real_grams: parseInt(realGrams),
       final_price: finalPrice,
