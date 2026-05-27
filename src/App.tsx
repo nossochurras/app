@@ -872,7 +872,6 @@ export default function App() {
             cartTotal={cartTotal}
             onBack={() => setView('cart')}
             onFinalize={async (paymentType: 'app' | 'local') => {
-              // Se já existe um pedido criado (veio da pesagem), só atualiza
               if (awaitingWeighingOrderId) {
                 await supabase
                   .from('orders')
@@ -881,19 +880,18 @@ export default function App() {
                     status: 'preparing',
                   })
                   .eq('id', awaitingWeighingOrderId);
-            
+
                 if (user?.id) {
                   const result = await addSpentAndCheckGoal(user.id, cartTotal);
                   if (result.couponGenerated && result.couponCode) {
                     setFidelityNewCoupon(result.couponCode);
                   }
                 }
-            
+
                 setView('success');
                 return;
               }
-            
-              // Fluxo normal sem pesagem
+
               let code: string;
               if (location === 'Retirada no Balcão') {
                 code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -909,9 +907,9 @@ export default function App() {
                 const nextNumber = (isNaN(lastNumber) ? 0 : lastNumber) + 1;
                 code = nextNumber.toString().padStart(3, '0');
               }
-            
+
               setOrderCode(code);
-            
+
               if (user?.id) {
                 const { error } = await supabase
                   .from('orders')
@@ -936,22 +934,22 @@ export default function App() {
                     order_code: code,
                     status: 'pending',
                   });
-            
+
                 if (error) {
                   console.error('Erro ao salvar pedido:', error.message);
                   return;
                 }
-            
+
                 const result = await addSpentAndCheckGoal(user.id, cartTotal);
                 if (result.couponGenerated && result.couponCode) {
                   setFidelityNewCoupon(result.couponCode);
                 }
               }
-            
+
               setView('success');
             }}
           />
-
+        )}
         {/* PROFILE SCREEN */}
         {(view === 'profile' || view === 'coupons') && (
           <ProfileScreen 
