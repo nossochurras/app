@@ -872,15 +872,28 @@ export default function App() {
             location={location}
             cartTotal={weighedTotal !== null ? weighedTotal : cartTotal}
             onBack={() => setView('cart')}
-            onFinalize={async (paymentType: 'app' | 'local') => {
+            onFinalize={async (paymentType: 'app' | 'local', coupon?: any) => {
               if (awaitingWeighingOrderId) {
+                const discountAmount = coupon
+                  ? coupon.type === 'fixed' ? Number(coupon.discount_value)
+                  : coupon.type === 'percent' ? Math.round((cartTotal * Number(coupon.discount_value) / 100) * 100) / 100
+                  : 0
+                  : 0;
+                const finalTotal = Math.max((weighedTotal !== null ? weighedTotal : cartTotal) - discountAmount, 0);
+              
                 await supabase.from('orders').update({
                   payment_type: paymentType,
                   status: 'paid',
+                  total: finalTotal,          // <-- linha nova
                 }).eq('id', awaitingWeighingOrderId);
-
+              
+                if (coupon) {
+                  await supabase.from('coupons').update({ used_count: coupon.used_count + 1 }).eq('id', coupon.id);
+                  await supabase.from('coupon_uses').insert({ coupon_id: coupon.id, order_id: awaitingWeighingOrderId, user_id: user?.id ?? null });
+                }
+              
                 if (user?.id) {
-                  const result = await addSpentAndCheckGoal(user.id, cartTotal);
+                  const result = await addSpentAndCheckGoal(user.id, finalTotal);   // <-- usa finalTotal
                   if (result.couponGenerated && result.couponCode) {
                     setFidelityNewCoupon(result.couponCode);
                   }
@@ -908,8 +921,15 @@ export default function App() {
 
               setOrderCode(code);
 
+              const discountAmount = coupon
+                ? coupon.type === 'fixed' ? Number(coupon.discount_value)
+                : coupon.type === 'percent' ? Math.round((cartTotal * Number(coupon.discount_value) / 100) * 100) / 100
+                : 0
+                : 0;
+              const finalTotal = Math.max(cartTotal - discountAmount, 0);
+
               if (user?.id) {
-                const { error } = await supabase
+                const { data: insertedOrder, error } = await supabase   // <-- captura data
                   .from('orders')
                   .insert({
                     user_id: user.id,
@@ -927,18 +947,25 @@ export default function App() {
                       final_price: null,
                       real_grams: null,
                     })),
-                    total: cartTotal,
+                    total: finalTotal,
                     payment_type: paymentType,
                     order_code: code,
                     status: 'pending',
-                  });
+                  })
+                  .select('id')
+                  .single();
 
                 if (error) {
                   console.error('Erro ao salvar pedido:', error.message);
                   return;
                 }
 
-                const result = await addSpentAndCheckGoal(user.id, cartTotal);
+                if (coupon) {
+                  await supabase.from('coupons').update({ used_count: coupon.used_count + 1 }).eq('id', coupon.id);
+                  await supabase.from('coupon_uses').insert({ coupon_id: coupon.id, order_id: insertedOrder?.id ?? null, user_id: user?.id ?? null });
+                }
+
+                const result = await addSpentAndCheckGoal(user.id, finalTotal);
                 if (result.couponGenerated && result.couponCode) {
                   setFidelityNewCoupon(result.couponCode);
                 }
@@ -1531,6 +1558,55 @@ function CartScreen({ cart, location, cartTotal, onBack, onAdd, onRemove, onChec
 
 function CheckoutScreen({ location, cartTotal, onBack, onFinalize }: any) {
   const [paymentType, setPaymentType] = useState<'app' | 'local'>('app');
+  const [couponCode, setCouponCode] = useState('');
+  const [coupon, setCoupon] = useState<any>(null);
+  const [couponError, setCouponError] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+
+  const discount = coupon
+    ? coupon.type === 'fixed' ? Number(coupon.discount_value)
+    : coupon.type === 'percent' ? Math.round((cartTotal * Number(coupon.discount_value) / 100) * 100) / 100
+    : 0
+    : 0;
+
+  const finalTotal = Math.max(cartTotal - discount, 0);
+
+  const handleApplyCoupon = async () => {
+    setCouponError('');
+    setCoupon(null);
+    setCouponLoading(true);
+    const upper = couponCode.toUpperCase().trim();
+
+    const { data } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('code', upper)
+      .maybeSingle();
+
+    if (!data) {
+      setCouponError('Cupom não encontrado.');
+      setCouponLoading(false);
+      return;
+    }
+    if (!data.active) {
+      setCouponError('Este cupom está inativo.');
+      setCouponLoading(false);
+      return;
+    }
+    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+      setCouponError('Este cupom expirou.');
+      setCouponLoading(false);
+      return;
+    }
+    if (data.used_count >= data.max_uses) {
+      setCouponError('Este cupom já atingiu o limite de usos.');
+      setCouponLoading(false);
+      return;
+    }
+
+    setCoupon(data);
+    setCouponLoading(false);
+  };
 
   return (
     <motion.div
@@ -1548,79 +1624,123 @@ function CheckoutScreen({ location, cartTotal, onBack, onFinalize }: any) {
         <h2 className="font-display text-2xl absolute left-1/2 -translate-x-1/2">Pagamento</h2>
       </div>
 
-      <div className="p-6 flex-1 flex flex-col">
-        <h3 className="text-xl font-bold text-brand-dark mb-4">Escolha a forma de pagamento</h3>
-        <p className="text-sm text-brand-dark/70 mb-8 border-b border-brand-gold/20 pb-4">
-          Você pode pagar agora pelo App com Cartão/PIX, ou pagar no momento da {location === 'Retirada no Balcão' ? 'retirada' : 'entrega'}.
-        </p>
+      <div className="p-6 flex-1 flex flex-col gap-6">
+        <div>
+          <h3 className="text-xl font-bold text-brand-dark mb-4">Escolha a forma de pagamento</h3>
+          <p className="text-sm text-brand-dark/70 mb-6 border-b border-brand-gold/20 pb-4">
+            Você pode pagar agora pelo App com Cartão/PIX, ou pagar no momento da {location === 'Retirada no Balcão' ? 'retirada' : 'entrega'}.
+          </p>
 
-        <div className="space-y-4">
-          <button 
-            onClick={() => setPaymentType('app')}
-            className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${
-              paymentType === 'app' ? 'border-brand-red bg-white shadow-lg scale-100' : 'border-brand-gold/20 bg-transparent hover:bg-white/50 scale-[0.98]'
-            }`}
-          >
-            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-              paymentType === 'app' ? 'border-brand-red' : 'border-brand-gold'
-            }`}>
-              {paymentType === 'app' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full"></motion.div>}
-            </div>
-            <div className="flex-1 text-left">
-              <div className="font-bold text-brand-dark">Pagar pelo App</div>
-              <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
-                <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
-                <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">PIX</span>
+          <div className="space-y-4">
+            <button
+              onClick={() => setPaymentType('app')}
+              className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${paymentType === 'app' ? 'border-brand-red bg-white shadow-lg' : 'border-brand-gold/20 bg-transparent hover:bg-white/50'}`}
+            >
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${paymentType === 'app' ? 'border-brand-red' : 'border-brand-gold'}`}>
+                {paymentType === 'app' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full" />}
               </div>
-            </div>
-          </button>
+              <div className="flex-1 text-left">
+                <div className="font-bold text-brand-dark">Pagar pelo App</div>
+                <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
+                  <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
+                  <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">PIX</span>
+                </div>
+              </div>
+            </button>
 
-          <button 
-            onClick={() => setPaymentType('local')}
-            className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${
-              paymentType === 'local' ? 'border-brand-red bg-white shadow-lg scale-100' : 'border-brand-gold/20 bg-transparent hover:bg-white/50 scale-[0.98]'
-            }`}
-          >
-            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-              paymentType === 'local' ? 'border-brand-red' : 'border-brand-gold'
-            }`}>
-              {paymentType === 'local' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full"></motion.div>}
-            </div>
-            <div className="flex-1 text-left">
-              <div className="font-bold text-brand-dark">Pagar {location === 'Retirada no Balcão' ? 'na Retirada' : 'no Local'}</div>
-              <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
-                <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
-                <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Benefício</span>
+            <button
+              onClick={() => setPaymentType('local')}
+              className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${paymentType === 'local' ? 'border-brand-red bg-white shadow-lg' : 'border-brand-gold/20 bg-transparent hover:bg-white/50'}`}
+            >
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${paymentType === 'local' ? 'border-brand-red' : 'border-brand-gold'}`}>
+                {paymentType === 'local' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full" />}
               </div>
-            </div>
-          </button>
+              <div className="flex-1 text-left">
+                <div className="font-bold text-brand-dark">Pagar {location === 'Retirada no Balcão' ? 'na Retirada' : 'no Local'}</div>
+                <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
+                  <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
+                  <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Benefício</span>
+                </div>
+              </div>
+            </button>
+          </div>
         </div>
-        
-        <div className="mt-auto pt-8">
-           <div className="bg-brand-dark text-brand-cream p-6 rounded-3xl shadow-xl flex items-center justify-between">
+
+        {/* CUPOM */}
+        <div className="bg-white border border-brand-gold/20 rounded-2xl p-5">
+          <div className="text-xs font-bold text-brand-dark/50 uppercase tracking-wider mb-3">Tem um cupom?</div>
+          {coupon ? (
+            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl p-3">
               <div>
-                 <div className="text-brand-gold text-xs font-bold uppercase tracking-widest mb-1">Total a Pagar</div>
-                 <div className="font-display text-3xl">R$ {cartTotal.toFixed(2).replace('.', ',')}</div>
+                <div className="font-bold text-green-700 text-sm">{coupon.code}</div>
+                <div className="text-xs text-green-600 mt-0.5">
+                  {coupon.type === 'fixed' && `- R$ ${Number(coupon.discount_value).toFixed(2).replace('.', ',')}`}
+                  {coupon.type === 'percent' && `- ${coupon.discount_value}%`}
+                  {coupon.type === 'free_item' && `Item grátis: ${coupon.free_item_description}`}
+                </div>
               </div>
-              <Flame size={40} className="text-brand-red opacity-50" />
-           </div>
+              <button onClick={() => { setCoupon(null); setCouponCode(''); }} className="text-red-400 text-xs font-bold">Remover</button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                value={couponCode}
+                onChange={e => setCouponCode(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
+                placeholder="CÓDIGO DO CUPOM"
+                className="flex-1 bg-brand-cream border border-brand-gold/30 rounded-xl px-4 py-2.5 text-sm font-bold tracking-widest text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:border-brand-red uppercase"
+              />
+              <button
+                onClick={handleApplyCoupon}
+                disabled={!couponCode || couponLoading}
+                className="px-4 py-2.5 bg-brand-dark text-brand-gold rounded-xl text-sm font-bold disabled:opacity-40 transition"
+              >
+                {couponLoading ? '...' : 'Aplicar'}
+              </button>
+            </div>
+          )}
+          {couponError && <p className="text-red-500 text-xs mt-2 font-medium">{couponError}</p>}
+        </div>
+
+        {/* TOTAL */}
+        <div className="bg-brand-dark text-brand-cream p-6 rounded-3xl shadow-xl">
+          <div className="text-brand-gold text-xs font-bold uppercase tracking-widest mb-3">Resumo</div>
+          <div className="flex justify-between items-center mb-2 text-brand-cream/60 text-sm">
+            <span>Subtotal</span>
+            <span>R$ {cartTotal.toFixed(2).replace('.', ',')}</span>
+          </div>
+          {discount > 0 && (
+            <div className="flex justify-between items-center mb-2 text-green-400 text-sm">
+              <span>Desconto ({coupon.code})</span>
+              <span>- R$ {discount.toFixed(2).replace('.', ',')}</span>
+            </div>
+          )}
+          {coupon?.type === 'free_item' && (
+            <div className="flex justify-between items-center mb-2 text-green-400 text-sm">
+              <span>Item grátis</span>
+              <span>{coupon.free_item_description}</span>
+            </div>
+          )}
+          <div className="flex justify-between items-center text-2xl font-display pt-3 border-t border-white/10 mt-2">
+            <span>Total</span>
+            <span className="text-brand-red">R$ {finalTotal.toFixed(2).replace('.', ',')}</span>
+          </div>
         </div>
       </div>
 
-       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-brand-cream via-brand-cream to-transparent z-50">
-         <div className="max-w-md mx-auto">
-           <button 
-              onClick={() => onFinalize(paymentType)}
-              className="w-full bg-brand-red text-white p-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-xl shadow-2xl hover:bg-red-700 transition hover:-translate-y-1 font-display tracking-widest uppercase"
-            >
-              Finalizar Pedido
-            </button>
-         </div>
-       </div>
+      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-brand-cream via-brand-cream to-transparent z-50">
+        <div className="max-w-md mx-auto">
+          <button
+            onClick={() => onFinalize(paymentType, coupon)}
+            className="w-full bg-brand-red text-white p-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-xl shadow-2xl hover:bg-red-700 transition hover:-translate-y-1 font-display tracking-widest uppercase"
+          >
+            Finalizar Pedido
+          </button>
+        </div>
+      </div>
     </motion.div>
   );
 }
-
 function BottomNav({ activeTab, cartCount, onNavigate }: { activeTab: string, cartCount: number, onNavigate: (tab: string) => void }) {
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-brand-gold/20 flex justify-between items-center pt-3 pb-safe-bottom z-[60] shadow-[0_-10px_30px_rgba(0,0,0,0.05)] text-brand-dark max-w-md mx-auto px-4">
