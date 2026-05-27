@@ -994,7 +994,7 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
 
     const allItems: any[] = orderData?.items ?? []
     const otherItemsTotal = allItems
-      .filter((i: any) => i.chosen_label !== item.chosen_label || i.name !== item.name)
+      .filter((i: any) => !(i.name === item.name && i.chosen_label === item.chosen_label))
       .reduce((s: number, i: any) => s + (Number(i.final_price ?? i.price) * (i.quantity ?? 1)), 0)
     const newTotal = otherItemsTotal + finalPrice
 
