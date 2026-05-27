@@ -300,7 +300,7 @@ export default function App() {
       return;
     }
   
-    if (data?.role === 'admin') {
+    if (data?.role === 'admin' || data?.role === 'super_admin') {
       setAdminStatus(true);
     } else {
       setAdminStatus(false);
