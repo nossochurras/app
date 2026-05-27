@@ -591,37 +591,57 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
     if (!realGrams) return
     setSaving(true)
     let photoUrl: string | null = null
-
+  
     if (photo) {
       const ext = photo.name.split('.').pop()
       const path = `balanca/${orderId}_${Date.now()}.${ext}`
-      const { data: uploadData } = await supabase.storage.from('churras-media').upload(path, photo, { upsert: true })
+      const { data: uploadData } = await supabase.storage
+        .from('churras-media')
+        .upload(path, photo, { upsert: true })
       if (uploadData) {
-        const { data: urlData } = supabase.storage.from('churras-media').getPublicUrl(path)
+        const { data: urlData } = supabase.storage
+          .from('churras-media')
+          .getPublicUrl(path)
         photoUrl = urlData.publicUrl
       }
     }
-
+  
     const finalPrice = calcFinal()
-
-    // Update order total and item
-    const updatedItems = (item._allItems ?? []).map((i: any) =>
-      i.name === item.name ? { ...i, real_grams: parseInt(realGrams), final_price: finalPrice, scale_photo_url: photoUrl } : i
-    )
-
-    // Insert notification for client
+  
+    // Busca pedido completo para recalcular total
+    const { data: orderData } = await supabase
+      .from('orders')
+      .select('items, total')
+      .eq('id', orderId)
+      .single()
+  
+    // Recalcula total: itens sem pesagem + valor real da carne
+    const allItems: any[] = orderData?.items ?? []
+    const otherItemsTotal = allItems
+      .filter((i: any) => !i.chosen_label)
+      .reduce((s: number, i: any) => s + (Number(i.price) * (i.quantity ?? 1)), 0)
+    const newTotal = otherItemsTotal + finalPrice
+  
+    // Atualiza total e status do pedido
+    await supabase
+      .from('orders')
+      .update({
+        total: newTotal,
+        status: 'weighing_done',
+      })
+      .eq('id', orderId)
+  
+    // Envia notificação para o cliente com foto, peso e total atualizado
     await supabase.from('order_notifications').insert({
       order_id: orderId,
       type: 'weight_update',
-      message: `Seu ${item.name} pesou ${realGrams}g.${discount > 0 ? ` Desconto de R$ ${discount.toFixed(2)} aplicado!` : ''}`,
+      message: `Seu ${item.name} pesou ${realGrams}g.${discount > 0 ? ` Desconto de R$ ${discount.toFixed(2).replace('.', ',')} aplicado!` : ''}`,
       photo_url: photoUrl,
       real_grams: parseInt(realGrams),
       final_price: finalPrice,
+      order_total: newTotal,
     })
-
-    // Advance to weighing_done
-    await supabase.from('orders').update({ status: 'weighing_done' }).eq('id', orderId)
-
+  
     setSaving(false)
     onDone()
   }
