@@ -760,82 +760,155 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: any) => void }) {
 
 function OrdersGrid({ profile, orders, selected, setSelected, advanceStatus, fetchOrders }: any) {
   const isMobile = useIsMobile()
+
+  // Mobile: bloqueia scroll do body quando o detalhe estiver aberto
+  React.useEffect(() => {
+    if (isMobile && selected) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [isMobile, selected])
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 380px', gap: '20px' }}>
-      {/* Lista */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {orders.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>
-            Nenhum pedido encontrado.
+    <>
+      {/* ── LISTA (igual em desktop e mobile) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 380px', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {orders.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>
+              Nenhum pedido encontrado.
+            </div>
+          )}
+          {orders.map((order: any) => {
+            const isSelected = selected?.id === order.id
+            const hasWeightItems = Array.isArray(order.items) && order.items.some((i: any) => i.weight_option_id || i.chosen_label)
+            return (
+              <motion.div
+                key={order.id}
+                layout
+                onClick={() => setSelected(isSelected ? null : order)}
+                style={{
+                  background: isSelected ? 'rgba(183,53,39,0.08)' : 'var(--surface-2)',
+                  border: `1px solid ${isSelected ? 'rgba(183,53,39,0.4)' : 'var(--border-subtle)'}`,
+                  borderRadius: '12px', padding: '14px 18px',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', gap: '14px'
+                }}
+              >
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', color: 'var(--brand-gold)', fontWeight: 700, width: '56px', flexShrink: 0 }}>
+                  #{order.order_code}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {order.location}
+                    {hasWeightItems && <Scale size={11} style={{ color: 'var(--brand-gold)' }} />}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                    {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} •{' '}
+                    {order.payment_type === 'app' ? 'Pago no App' : 'Pagamento Local'}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'var(--font-display)', color: 'var(--brand-gold)' }}>
+                    R$ {Number(order.total).toFixed(2).replace('.',',')}
+                  </div>
+                  <div style={{ marginTop: '4px' }}>
+                    <StatusBadge status={order.status} />
+                  </div>
+                </div>
+              </motion.div>
+            )
+          })}
+        </div>
+
+        {/* ── PAINEL DESKTOP (coluna direita, igual antes) ── */}
+        {!isMobile && (
+          <div>
+            <AnimatePresence>
+              {selected ? (
+                <OrderDetail key={selected.id} order={selected} onAdvance={advanceStatus} onClose={() => setSelected(null)} onRefresh={fetchOrders} profile={profile} />
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  style={{
+                    background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+                    borderRadius: '14px', height: '200px',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    gap: '10px', color: 'var(--text-dim)'
+                  }}
+                >
+                  <Eye size={28} style={{ opacity: 0.3 }} />
+                  <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: 'var(--font-display)' }}>
+                    Selecione um pedido
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
-        {orders.map((order: any) => {
-          const isSelected = selected?.id === order.id
-          const hasWeightItems = Array.isArray(order.items) && order.items.some((i: any) => i.weight_option_id || i.chosen_label)
-          return (
-            <motion.div
-              key={order.id}
-              layout
-              onClick={() => setSelected(isSelected ? null : order)}
-              style={{
-                background: isSelected ? 'rgba(183,53,39,0.08)' : 'var(--surface-2)',
-                border: `1px solid ${isSelected ? 'rgba(183,53,39,0.4)' : 'var(--border-subtle)'}`,
-                borderRadius: '12px', padding: '14px 18px',
-                cursor: 'pointer', transition: 'all 0.15s',
-                display: 'flex', alignItems: 'center', gap: '14px'
-              }}
-            >
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', color: 'var(--brand-gold)', fontWeight: 700, width: '56px', flexShrink: 0 }}>
-                #{order.order_code}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {order.location}
-                  {hasWeightItems && <Scale size={11} style={{ color: 'var(--brand-gold)' }} />}
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                  {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} •{' '}
-                  {order.payment_type === 'app' ? 'Pago no App' : 'Pagamento Local'}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'var(--font-display)', color: 'var(--brand-gold)' }}>
-                  R$ {Number(order.total).toFixed(2).replace('.',',')}
-                </div>
-                <div style={{ marginTop: '4px' }}>
-                  <StatusBadge status={order.status} />
-                </div>
-              </div>
-            </motion.div>
-          )
-        })}
       </div>
 
-      {/* Painel de detalhe */}
-      <div>
+      {/* ── MODAL MOBILE (position: fixed, cobre tudo, slide-up) ── */}
+      {isMobile && (
         <AnimatePresence>
-          {selected ? (
-            <OrderDetail key={selected.id} order={selected} onAdvance={advanceStatus} onClose={() => setSelected(null)} onRefresh={fetchOrders} profile={profile} />
-          ) : !isMobile ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={{
-                background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
-                borderRadius: '14px', height: '200px',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                gap: '10px', color: 'var(--text-dim)'
-              }}
-            >
-              <Eye size={28} style={{ opacity: 0.3 }} />
-              <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: 'var(--font-display)' }}>
-                Selecione um pedido
-              </span>
-            </motion.div>
-          ) : null}
+          {selected && (
+            <>
+              {/* Backdrop */}
+              <motion.div
+                key="backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelected(null)}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 60,
+                  background: 'rgba(26,9,5,0.75)', backdropFilter: 'blur(2px)'
+                }}
+              />
+              {/* Sheet */}
+              <motion.div
+                key="sheet"
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                style={{
+                  position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 61,
+                  maxHeight: '92vh',
+                  background: 'var(--surface-2)',
+                  borderTop: '1px solid var(--border-medium)',
+                  borderRadius: '20px 20px 0 0',
+                  overflowY: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                  boxShadow: '0 -8px 40px rgba(26,9,5,0.6)'
+                }}
+              >
+                {/* Drag handle visual */}
+                <div style={{
+                  display: 'flex', justifyContent: 'center', paddingTop: '12px', paddingBottom: '4px'
+                }}>
+                  <div style={{
+                    width: '36px', height: '4px', borderRadius: '2px',
+                    background: 'var(--border-medium)'
+                  }} />
+                </div>
+                <OrderDetail
+                  key={selected.id}
+                  order={selected}
+                  onAdvance={advanceStatus}
+                  onClose={() => setSelected(null)}
+                  onRefresh={fetchOrders}
+                  profile={profile}
+                />
+              </motion.div>
+            </>
+          )}
         </AnimatePresence>
-      </div>
-    </div>
+      )}
+    </>
   )
 }
 
