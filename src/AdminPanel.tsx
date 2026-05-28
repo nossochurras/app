@@ -123,6 +123,18 @@ function playNotificationSound() {
   } catch (e) {}
 }
 
+// ─── MOBILE HOOK ──────────────────────────────────────────────
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768)
+  React.useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+  return isMobile
+}
+
 // ─── GLOBAL STYLES ────────────────────────────────────────────
 
 const globalStyle = `
@@ -203,6 +215,16 @@ export default function AdminPanel() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
+  const isMobile = useIsMobile()
+  const [drawerOpen, setDrawerOpen] = React.useState(false)
+
+  // Fecha drawer ao trocar de aba
+  const handleTabChange = (tab: any) => {
+    setActiveTab(tab)
+    if (tab === 'orders') setNewOrderCount(0)
+    setDrawerOpen(false)
+  }
+
   if (loading) return (
     <>
       <style>{globalStyle}</style>
@@ -219,130 +241,208 @@ export default function AdminPanel() {
     </>
   )
 
+  // Conteúdo da sidebar (reutilizado em desktop e drawer mobile)
+  const sidebarContent = (
+    <>
+      {/* Logo */}
+      <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+        <BrandLogo />
+        <p style={{
+          fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase',
+          color: 'var(--brand-gold)', fontFamily: 'var(--font-display)',
+          fontWeight: 600, marginTop: '8px', opacity: 0.8
+        }}>
+          Painel Admin
+        </p>
+      </div>
+
+      {/* Nav */}
+      <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        {[
+          { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard',   perm: 'view_dashboard' as keyof AdminPermissions },
+          { id: 'orders',    icon: ShoppingBag,     label: 'Pedidos',     perm: 'view_orders' as keyof AdminPermissions,    badge: newOrderCount > 0 ? newOrderCount : null },
+          { id: 'menu',      icon: UtensilsCrossed, label: 'Cardápio',    perm: 'view_menu' as keyof AdminPermissions },
+          { id: 'coupons',   icon: Ticket,          label: 'Cupons',      perm: 'view_coupons' as keyof AdminPermissions },
+          { id: 'reports',   icon: BarChart2,       label: 'Relatórios',  perm: 'view_reports' as keyof AdminPermissions },
+          ...(profile?.role === 'super_admin' ? [{ id: 'team', icon: Users, label: 'Equipe', perm: 'manage_admins' as keyof AdminPermissions }] : []),
+        ].filter(item => profile?.role === 'super_admin' || profile?.permissions?.[item.perm])
+        .map(item => {
+          const Icon = item.icon
+          const active = activeTab === item.id
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleTabChange(item.id as any)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '10px 12px', borderRadius: '8px',
+                border: active ? '1px solid rgba(183,53,39,0.4)' : '1px solid transparent',
+                background: active ? 'rgba(183,53,39,0.15)' : 'transparent',
+                color: active ? 'var(--brand-cream)' : 'var(--text-muted)',
+                cursor: 'pointer', transition: 'all 0.15s',
+                fontFamily: 'var(--font-display)', fontWeight: 600,
+                fontSize: '14px', letterSpacing: '0.5px',
+                textAlign: 'left', width: '100%',
+              }}
+              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'var(--brand-cream)' }}
+              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)' }}
+            >
+              <Icon size={16} style={{ color: active ? 'var(--brand-red)' : 'inherit', flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>{item.label}</span>
+              {item.badge && (
+                <span style={{
+                  background: 'var(--brand-red)', color: 'var(--brand-cream)',
+                  fontSize: '10px', fontWeight: 700,
+                  width: '18px', height: '18px', borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Decorative divider */}
+      <div style={{
+        margin: '0 16px', height: '1px',
+        background: 'linear-gradient(90deg, transparent, var(--brand-gold), transparent)',
+        opacity: 0.3
+      }} />
+
+      {/* User */}
+      <div style={{ padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+          <div style={{
+            width: '32px', height: '32px', borderRadius: '50%',
+            background: 'rgba(183,53,39,0.2)', border: '1px solid rgba(183,53,39,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '12px', fontWeight: 700, color: 'var(--brand-red)',
+            fontFamily: 'var(--font-display)'
+          }}>
+            {profile?.full_name?.[0]?.toUpperCase() ?? 'A'}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile?.full_name ?? 'Admin'}
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '1px', textTransform: 'uppercase' }}>Administrador</div>
+          </div>
+        </div>
+        <button
+          onClick={() => supabase.auth.signOut().then(() => window.location.href = '/')}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '8px 10px', borderRadius: '6px', border: '1px solid transparent',
+            background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer',
+            fontSize: '12px', fontFamily: 'var(--font-body)', transition: 'all 0.15s'
+          }}
+          onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = 'var(--brand-red)'; b.style.background = 'rgba(183,53,39,0.08)' }}
+          onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = 'var(--text-dim)'; b.style.background = 'transparent' }}
+        >
+          <LogOut size={13} /> Sair
+        </button>
+      </div>
+    </>
+  )
+
   return (
     <>
       <style>{globalStyle}</style>
-      <div style={{ minHeight: '100vh', background: 'var(--surface-1)', display: 'flex' }}>
-        {/* SIDEBAR */}
-        <aside style={{
-          width: '220px', background: 'var(--surface-2)',
-          borderRight: '1px solid var(--border-subtle)',
-          display: 'flex', flexDirection: 'column',
-          position: 'sticky', top: 0, height: '100vh', flexShrink: 0
-        }}>
-          {/* Logo */}
-          <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+      <div style={{ minHeight: '100vh', background: 'var(--surface-1)', display: 'flex', flexDirection: 'column' }}>
+
+        {/* ── TOPBAR MOBILE ── */}
+        {isMobile && (
+          <header style={{
+            position: 'sticky', top: 0, zIndex: 40,
+            background: 'var(--surface-2)',
+            borderBottom: '1px solid var(--border-subtle)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 16px', height: '56px', flexShrink: 0
+          }}>
             <BrandLogo />
-            <p style={{
-              fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase',
-              color: 'var(--brand-gold)', fontFamily: 'var(--font-display)',
-              fontWeight: 600, marginTop: '8px', opacity: 0.8
-            }}>
-              Painel Admin
-            </p>
-          </div>
-
-          {/* Nav */}
-          <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            {[
-              { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard',   perm: 'view_dashboard' as keyof AdminPermissions },
-              { id: 'orders',    icon: ShoppingBag,     label: 'Pedidos',     perm: 'view_orders' as keyof AdminPermissions,    badge: newOrderCount > 0 ? newOrderCount : null },
-              { id: 'menu',      icon: UtensilsCrossed, label: 'Cardápio',    perm: 'view_menu' as keyof AdminPermissions },
-              { id: 'coupons',   icon: Ticket,          label: 'Cupons',      perm: 'view_coupons' as keyof AdminPermissions },
-              { id: 'reports',   icon: BarChart2,       label: 'Relatórios',  perm: 'view_reports' as keyof AdminPermissions },
-              ...(profile?.role === 'super_admin' ? [{ id: 'team', icon: Users, label: 'Equipe', perm: 'manage_admins' as keyof AdminPermissions }] : []),
-            ].filter(item => profile?.role === 'super_admin' || profile?.permissions?.[item.perm])
-            .map(item => {
-              const Icon = item.icon
-              const active = activeTab === item.id
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => { setActiveTab(item.id as any); if (item.id === 'orders') setNewOrderCount(0) }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '10px 12px', borderRadius: '8px',
-                    border: active ? '1px solid rgba(183,53,39,0.4)' : '1px solid transparent',
-                    background: active ? 'rgba(183,53,39,0.15)' : 'transparent',
-                    color: active ? 'var(--brand-cream)' : 'var(--text-muted)',
-                    cursor: 'pointer', transition: 'all 0.15s',
-                    fontFamily: 'var(--font-display)', fontWeight: 600,
-                    fontSize: '14px', letterSpacing: '0.5px',
-                    textAlign: 'left', width: '100%',
-                  }}
-                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'var(--brand-cream)' }}
-                  onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)' }}
-                >
-                  <Icon size={16} style={{ color: active ? 'var(--brand-red)' : 'inherit', flexShrink: 0 }} />
-                  <span style={{ flex: 1 }}>{item.label}</span>
-                  {item.badge && (
-                    <span style={{
-                      background: 'var(--brand-red)', color: 'var(--brand-cream)',
-                      fontSize: '10px', fontWeight: 700,
-                      width: '18px', height: '18px', borderRadius: '50%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </nav>
-
-          {/* Decorative divider */}
-          <div style={{
-            margin: '0 16px', height: '1px',
-            background: 'linear-gradient(90deg, transparent, var(--brand-gold), transparent)',
-            opacity: 0.3
-          }} />
-
-          {/* User */}
-          <div style={{ padding: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-              <div style={{
-                width: '32px', height: '32px', borderRadius: '50%',
-                background: 'rgba(183,53,39,0.2)', border: '1px solid rgba(183,53,39,0.4)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '12px', fontWeight: 700, color: 'var(--brand-red)',
-                fontFamily: 'var(--font-display)'
-              }}>
-                {profile?.full_name?.[0]?.toUpperCase() ?? 'A'}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {profile?.full_name ?? 'Admin'}
-                </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '1px', textTransform: 'uppercase' }}>Administrador</div>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {newOrderCount > 0 && (
+                <span style={{
+                  background: 'var(--brand-red)', color: 'var(--brand-cream)',
+                  fontSize: '11px', fontWeight: 700,
+                  minWidth: '20px', height: '20px', borderRadius: '10px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '0 4px'
+                }}>
+                  {newOrderCount}
+                </span>
+              )}
+              <button
+                onClick={() => setDrawerOpen(v => !v)}
+                style={{
+                  background: 'transparent', border: '1px solid var(--border-medium)',
+                  borderRadius: '8px', padding: '8px', cursor: 'pointer',
+                  color: 'var(--text-primary)', display: 'flex', alignItems: 'center'
+                }}
+              >
+                {drawerOpen ? <X size={20} /> : (
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <rect x="2" y="4" width="16" height="2" rx="1" fill="currentColor"/>
+                    <rect x="2" y="9" width="16" height="2" rx="1" fill="currentColor"/>
+                    <rect x="2" y="14" width="16" height="2" rx="1" fill="currentColor"/>
+                  </svg>
+                )}
+              </button>
             </div>
-            <button
-              onClick={() => supabase.auth.signOut().then(() => window.location.href = '/')}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '8px 10px', borderRadius: '6px', border: '1px solid transparent',
-                background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer',
-                fontSize: '12px', fontFamily: 'var(--font-body)', transition: 'all 0.15s'
-              }}
-              onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = 'var(--brand-red)'; b.style.background = 'rgba(183,53,39,0.08)' }}
-              onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.color = 'var(--text-dim)'; b.style.background = 'transparent' }}
-            >
-              <LogOut size={13} /> Sair
-            </button>
-          </div>
-        </aside>
+          </header>
+        )}
 
-        {/* MAIN */}
-        <main style={{ flex: 1, overflowY: 'auto' }}>
-          <AnimatePresence mode="wait">
-            {activeTab === 'dashboard' && <DashboardTab key="dashboard" onNavigate={setActiveTab} />}
-            {activeTab === 'orders'    && <OrdersTab    key="orders" profile={profile!} />}
-            {activeTab === 'menu'      && <MenuTab      key="menu"   profile={profile!} />}
-            {activeTab === 'coupons'   && <CouponsTab   key="coupons" profile={profile!} />}
-            {activeTab === 'reports'   && <ReportsTab   key="reports" />}
-            {activeTab === 'team'      && profile?.role === 'super_admin' && <TeamTab key="team" />}
-          </AnimatePresence>
-        </main>
+        <div style={{ display: 'flex', flex: 1, position: 'relative' }}>
+          {/* ── OVERLAY MOBILE ── */}
+          {isMobile && drawerOpen && (
+            <div
+              onClick={() => setDrawerOpen(false)}
+              style={{
+                position: 'fixed', inset: 0, zIndex: 30,
+                background: 'rgba(26,9,5,0.7)', backdropFilter: 'blur(2px)'
+              }}
+            />
+          )}
+
+          {/* ── SIDEBAR (desktop: sticky | mobile: drawer) ── */}
+          <aside style={{
+            width: '220px',
+            background: 'var(--surface-2)',
+            borderRight: '1px solid var(--border-subtle)',
+            display: 'flex', flexDirection: 'column',
+            ...(isMobile ? {
+              position: 'fixed',
+              top: '56px',
+              left: 0,
+              bottom: 0,
+              zIndex: 35,
+              transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+              transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)',
+              overflowY: 'auto',
+            } : {
+              position: 'sticky',
+              top: 0,
+              height: '100vh',
+              flexShrink: 0,
+            })
+          }}>
+          {sidebarContent}
+          </aside>
+
+          {/* MAIN */}
+          <main style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
+            <AnimatePresence mode="wait">
+              {activeTab === 'dashboard' && <DashboardTab key="dashboard" onNavigate={handleTabChange} />}
+              {activeTab === 'orders'    && <OrdersTab    key="orders" profile={profile!} />}
+              {activeTab === 'menu'      && <MenuTab      key="menu"   profile={profile!} />}
+              {activeTab === 'coupons'   && <CouponsTab   key="coupons" profile={profile!} />}
+              {activeTab === 'reports'   && <ReportsTab   key="reports" />}
+              {activeTab === 'team'      && profile?.role === 'super_admin' && <TeamTab key="team" />}
+            </AnimatePresence>
+          </main>
+        </div>
       </div>
     </>
   )
@@ -405,19 +505,20 @@ function StarDivider() {
 // ─── PAGE WRAPPER ─────────────────────────────────────────────
 
 function Page({ title, subtitle, children, action }: any) {
+  const isMobile = useIsMobile()
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2 }}
-      style={{ padding: '32px' }}
+      style={{ padding: isMobile ? '16px' : '32px' }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '28px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? '16px' : '28px', gap: '12px', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{
             fontFamily: 'var(--font-display)', fontWeight: 800,
-            fontSize: '32px', textTransform: 'uppercase', letterSpacing: '1px',
+            fontSize: isMobile ? '24px' : '32px', textTransform: 'uppercase', letterSpacing: '1px',
             color: 'var(--text-primary)', lineHeight: 1
           }}>
             {title}
@@ -557,6 +658,18 @@ function SectionCard({ children, style: extraStyle }: { children: any; style?: R
   )
 }
 
+function DashboardStats({ stats }: { stats: any }) {
+  const isMobile = useIsMobile()
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '12px', marginBottom: isMobile ? '16px' : '28px' }}>
+      <StatCard icon={ShoppingBag}  label="Pedidos hoje"     value={stats.orders}                                           color="var(--brand-red)" />
+      <StatCard icon={DollarSign}   label="Faturamento"      value={`R$ ${stats.revenue.toFixed(2).replace('.',',')}`}      color="var(--brand-gold)" />
+      <StatCard icon={Clock}        label="Em andamento"     value={stats.pending}                                          color="#c7ad70" />
+      <StatCard icon={Users}        label="Clientes hoje"    value={stats.customers}                                        color="var(--brand-red)" />
+    </div>
+  )
+}
+
 // ─── DASHBOARD TAB ────────────────────────────────────────────
 
 function DashboardTab({ onNavigate }: { onNavigate: (tab: any) => void }) {
@@ -585,12 +698,7 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: any) => void }) {
       title="Dashboard"
       subtitle={`NOSSO churrasco • ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
     >
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
-        <StatCard icon={ShoppingBag}  label="Pedidos hoje"     value={stats.orders}                                            color="var(--brand-red)" />
-        <StatCard icon={DollarSign}   label="Faturamento hoje" value={`R$ ${stats.revenue.toFixed(2).replace('.',',')}`}       color="var(--brand-gold)" />
-        <StatCard icon={Clock}        label="Em andamento"     value={stats.pending}                                           color="#c7ad70" />
-        <StatCard icon={Users}        label="Clientes hoje"    value={stats.customers}                                         color="var(--brand-red)" />
-      </div>
+      <DashboardStats stats={stats} />
 
       <SectionCard>
         <div style={{
@@ -647,6 +755,87 @@ function DashboardTab({ onNavigate }: { onNavigate: (tab: any) => void }) {
         </div>
       </SectionCard>
     </Page>
+  )
+}
+
+function OrdersGrid({ profile, orders, selected, setSelected, advanceStatus, fetchOrders }: any) {
+  const isMobile = useIsMobile()
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 380px', gap: '20px' }}>
+      {/* Lista */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {orders.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>
+            Nenhum pedido encontrado.
+          </div>
+        )}
+        {orders.map((order: any) => {
+          const isSelected = selected?.id === order.id
+          const hasWeightItems = Array.isArray(order.items) && order.items.some((i: any) => i.weight_option_id || i.chosen_label)
+          return (
+            <motion.div
+              key={order.id}
+              layout
+              onClick={() => setSelected(isSelected ? null : order)}
+              style={{
+                background: isSelected ? 'rgba(183,53,39,0.08)' : 'var(--surface-2)',
+                border: `1px solid ${isSelected ? 'rgba(183,53,39,0.4)' : 'var(--border-subtle)'}`,
+                borderRadius: '12px', padding: '14px 18px',
+                cursor: 'pointer', transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', gap: '14px'
+              }}
+            >
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', color: 'var(--brand-gold)', fontWeight: 700, width: '56px', flexShrink: 0 }}>
+                #{order.order_code}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {order.location}
+                  {hasWeightItems && <Scale size={11} style={{ color: 'var(--brand-gold)' }} />}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                  {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} •{' '}
+                  {order.payment_type === 'app' ? 'Pago no App' : 'Pagamento Local'}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'var(--font-display)', color: 'var(--brand-gold)' }}>
+                  R$ {Number(order.total).toFixed(2).replace('.',',')}
+                </div>
+                <div style={{ marginTop: '4px' }}>
+                  <StatusBadge status={order.status} />
+                </div>
+              </div>
+            </motion.div>
+          )
+        })}
+      </div>
+
+      {/* Painel de detalhe */}
+      <div>
+        <AnimatePresence>
+          {selected ? (
+            <OrderDetail key={selected.id} order={selected} onAdvance={advanceStatus} onClose={() => setSelected(null)} onRefresh={fetchOrders} profile={profile} />
+          ) : !isMobile ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{
+                background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+                borderRadius: '14px', height: '200px',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: '10px', color: 'var(--text-dim)'
+              }}
+            >
+              <Eye size={28} style={{ opacity: 0.3 }} />
+              <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: 'var(--font-display)' }}>
+                Selecione um pedido
+              </span>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
+    </div>
   )
 }
 
@@ -735,7 +924,7 @@ function OrdersTab({ profile }: { profile: Profile }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '20px' }}>
+      <OrdersGrid profile={profile} orders={filtered} selected={selected} setSelected={setSelected} advanceStatus={advanceStatus} fetchOrders={fetchOrders} />
         {/* List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {loading && (
@@ -1653,6 +1842,17 @@ function CouponsTab({ profile }: { profile: Profile }) {
   )
 }
 
+function FidelityStats({ coupons }: { coupons: any[] }) {
+  const isMobile = useIsMobile()
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: '12px', marginBottom: '24px' }}>
+      <StatCard icon={Ticket}      label="Total gerados" value={coupons.length}                             color="var(--brand-red)" />
+      <StatCard icon={CheckCircle} label="Resgatados"    value={coupons.filter(c => c.redeemed).length}    color="var(--brand-gold)" />
+      <StatCard icon={Clock}       label="Disponíveis"   value={coupons.filter(c => !c.redeemed).length}   color="var(--brand-gold)" />
+    </div>
+  )
+}
+
 // ─── FIDELITY COUPONS ─────────────────────────────────────────
 
 function FidelityCouponsSubTab() {
@@ -1684,11 +1884,7 @@ function FidelityCouponsSubTab() {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '24px' }}>
-        <StatCard icon={Ticket}      label="Total gerados" value={coupons.length}                             color="var(--brand-red)" />
-        <StatCard icon={CheckCircle} label="Resgatados"    value={coupons.filter(c => c.redeemed).length}    color="var(--brand-gold)" />
-        <StatCard icon={Clock}       label="Disponíveis"   value={coupons.filter(c => !c.redeemed).length}   color="var(--brand-gold)" />
-      </div>
+      <FidelityStats coupons={coupons} />
 
       {loading && <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dim)', fontSize: '13px' }}>Carregando...</div>}
 
@@ -2148,6 +2344,110 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
+function ReportsGrid({ data, loading, maxRevenue }: { data: any; loading: boolean; maxRevenue: number }) {
+  const isMobile = useIsMobile()
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '20px' }}>
+      {/* Bar chart */}
+      <SectionCard>
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-primary)' }}>
+            Faturamento por Dia
+          </h3>
+        </div>
+        <div style={{ padding: '20px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dim)', fontSize: '13px' }}>Carregando...</div>
+          ) : data.byDay.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dim)', fontSize: '12px' }}>Sem dados no período</div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '140px' }}>
+              {data.byDay.map(([day, val]: any) => (
+                <div key={day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', height: '100%', justifyContent: 'flex-end' }}>
+                  <div style={{ fontSize: '9px', color: 'var(--brand-gold)', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
+                    {(val/100).toFixed(0)}
+                  </div>
+                  <div style={{
+                    width: '100%', background: 'var(--brand-red)', borderRadius: '4px 4px 0 0',
+                    height: `${Math.max((val / maxRevenue) * 100, 4)}%`,
+                    opacity: 0.85, transition: 'height 0.3s ease',
+                    position: 'relative', overflow: 'hidden'
+                  }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'var(--brand-gold)' }} />
+                  </div>
+                  <div style={{ fontSize: '9px', color: 'var(--text-dim)' }}>{day}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </SectionCard>
+
+      {/* Top items */}
+      <SectionCard>
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-primary)' }}>
+            Itens Mais Pedidos
+          </h3>
+        </div>
+        <div style={{ padding: '20px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dim)', fontSize: '13px' }}>Carregando...</div>
+          ) : data.topItems.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dim)', fontSize: '12px' }}>Sem dados no período</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {data.topItems.map((item: any, i: number) => (
+                <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                    background: i === 0 ? 'var(--brand-gold)' : 'rgba(183,53,39,0.2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-display)',
+                    color: i === 0 ? 'var(--brand-dark)' : 'var(--brand-red)'
+                  }}>
+                    {i + 1}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '4px' }}>
+                      {item.name}
+                    </div>
+                    <div style={{ height: '3px', background: 'var(--surface-3)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%', borderRadius: '2px',
+                        background: i === 0 ? 'var(--brand-gold)' : 'var(--brand-red)',
+                        width: `${(item.count / (data.topItems[0]?.count ?? 1)) * 100}%`,
+                        transition: 'width 0.4s ease'
+                      }} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', flexShrink: 0, alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{item.count}x</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--brand-gold)' }}>
+                      R$ {item.revenue.toFixed(0)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </SectionCard>
+    </div>
+  )
+}
+
+function ReportsStats({ data }: { data: any }) {
+  const isMobile = useIsMobile()
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: '12px', marginBottom: isMobile ? '16px' : '28px' }}>
+      <StatCard icon={DollarSign}  label="Faturamento"  value={`R$ ${data.revenue.toFixed(2).replace('.',',')}`}   color="var(--brand-gold)" />
+      <StatCard icon={ShoppingBag} label="Pedidos"      value={data.orders}                                         color="var(--brand-red)" />
+      <StatCard icon={TrendingUp}  label="Ticket Médio" value={`R$ ${data.avgTicket.toFixed(2).replace('.',',')}`} color="var(--brand-gold)" />
+    </div>
+  )
+}
+
 // ─── REPORTS TAB ──────────────────────────────────────────────
 
 function ReportsTab() {
@@ -2215,13 +2515,9 @@ function ReportsTab() {
         </div>
       }
     >
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '28px' }}>
-        <StatCard icon={DollarSign}  label="Faturamento"  value={`R$ ${data.revenue.toFixed(2).replace('.',',')}`}      color="var(--brand-gold)" />
-        <StatCard icon={ShoppingBag} label="Pedidos"      value={data.orders}                                            color="var(--brand-red)" />
-        <StatCard icon={TrendingUp}  label="Ticket Médio" value={`R$ ${data.avgTicket.toFixed(2).replace('.',',')}`}    color="var(--brand-gold)" />
-      </div>
+      <ReportsStats data={data} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+      <ReportsGrid data={data} loading={loading} maxRevenue={maxRevenue} />
         {/* Bar chart */}
         <SectionCard>
           <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
