@@ -73,6 +73,96 @@ type OrderItem = {
   weight_option_id: string | null
 }
 
+// ─── CSV IMPORT TYPES ─────────────────────────────────────────
+
+type CsvProduct = {
+  codigo: string
+  nome: string
+  valor: number
+  disponivel: boolean
+  categoria: string
+  estoqueMin: number
+  estoqueMax: number
+}
+
+function parseBrazilianNumber(raw: string): number {
+  if (!raw || raw.trim() === '') return 0
+  // Remove pontos de milhar, substitui vírgula decimal por ponto
+  const clean = raw.replace(/\./g, '').replace(',', '.')
+  const n = parseFloat(clean)
+  return isNaN(n) ? 0 : n
+}
+
+function parseCsvProducts(csvText: string): CsvProduct[] {
+  const lines = csvText.split('\n').filter(l => l.trim())
+  // Primeira linha é o cabeçalho — pula
+  const results: CsvProduct[] = []
+  for (let i = 1; i < lines.length; i++) {
+    // Parser robusto para CSV com campos entre aspas contendo vírgulas
+    const cols = parseCsvLine(lines[i])
+    if (cols.length < 18) continue
+    const codigo       = cols[0]?.trim() ?? ''
+    const nome         = cols[1]?.replace(/^"|"$/g, '').trim() ?? ''
+    const valorRaw     = cols[3]?.replace(/^"|"$/g, '').trim() ?? '0'
+    const dispRaw      = cols[6]?.replace(/^"|"$/g, '').trim() ?? 'Não'
+    const catNome      = cols[17]?.replace(/^"|"$/g, '').trim() ?? ''
+    const estoqueMin   = parseBrazilianNumber(cols[10]?.replace(/^"|"$/g, '').trim() ?? '0')
+    const estoqueMax   = parseBrazilianNumber(cols[11]?.replace(/^"|"$/g, '').trim() ?? '0')
+    if (!nome || !codigo) continue
+    results.push({
+      codigo,
+      nome,
+      valor: parseBrazilianNumber(valorRaw),
+      disponivel: dispRaw === 'Sim',
+      categoria: catNome,
+      estoqueMin,
+      estoqueMax,
+    })
+  }
+  return results
+}
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = []
+  let cur = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { cur += '"'; i++ }
+      else inQuotes = !inQuotes
+    } else if (ch === ',' && !inQuotes) {
+      result.push(cur)
+      cur = ''
+    } else {
+      cur += ch
+    }
+  }
+  result.push(cur)
+  return result
+}
+
+// Mapeia categoria do ERP para categoria do menu_items
+function mapCategoria(cat: string): 'Carnes' | 'Acompanhamentos' | 'Bebidas' {
+  const c = (cat ?? '').toLowerCase()
+  if (
+    c.includes('bovi') || c.includes('picanha') || c.includes('bife') ||
+    c.includes('fralda') || c.includes('maminha') || c.includes('costela') ||
+    c.includes('linguiça') || c.includes('linguica') || c.includes('frango') ||
+    c.includes('suino') || c.includes('suíno') || c.includes('carne') ||
+    c.includes('hambur') || c.includes('cupim') || c.includes('entrecote') ||
+    c.includes('salm') || c.includes('camarão') || c.includes('peixe')
+  ) return 'Carnes'
+  if (
+    c.includes('cerve') || c.includes('vinho') || c.includes('viinho') ||
+    c.includes('destil') || c.includes('energé') || c.includes('energeti') ||
+    c.includes('refrigei') || c.includes('agua') || c.includes('água') ||
+    c.includes('whisky') || c.includes('licor') || c.includes('dose') ||
+    c.includes('suco') || c.includes('gin') || c.includes('vodka')
+  ) return 'Bebidas'
+  return 'Acompanhamentos'
+}
+
 type Order = {
   id: string
   order_code: string
@@ -191,7 +281,7 @@ const globalStyle = `
 export default function AdminPanel() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'menu' | 'coupons' | 'reports'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'menu' | 'coupons' | 'reports' | 'estoque' | 'team'>('dashboard')
   const [newOrderCount, setNewOrderCount] = useState(0)
 
   useEffect(() => {
@@ -264,6 +354,7 @@ export default function AdminPanel() {
           { id: 'menu',      icon: UtensilsCrossed, label: 'Cardápio',    perm: 'view_menu' as keyof AdminPermissions },
           { id: 'coupons',   icon: Ticket,          label: 'Cupons',      perm: 'view_coupons' as keyof AdminPermissions },
           { id: 'reports',   icon: BarChart2,       label: 'Relatórios',  perm: 'view_reports' as keyof AdminPermissions },
+          { id: 'estoque',   icon: Upload,          label: 'Estoque',     perm: 'manage_menu' as keyof AdminPermissions },
           ...(profile?.role === 'super_admin' ? [{ id: 'team', icon: Users, label: 'Equipe', perm: 'manage_admins' as keyof AdminPermissions }] : []),
         ].filter(item => profile?.role === 'super_admin' || profile?.permissions?.[item.perm])
         .map(item => {
@@ -439,6 +530,7 @@ export default function AdminPanel() {
               {activeTab === 'menu'      && <MenuTab      key="menu"   profile={profile!} />}
               {activeTab === 'coupons'   && <CouponsTab   key="coupons" profile={profile!} />}
               {activeTab === 'reports'   && <ReportsTab   key="reports" />}
+              {activeTab === 'estoque'   && <EstoqueTab   key="estoque" />}
               {activeTab === 'team'      && profile?.role === 'super_admin' && <TeamTab key="team" />}
             </AnimatePresence>
           </main>
@@ -2512,6 +2604,225 @@ function ReportsTab() {
       <ReportsStats data={data} />
 
       <ReportsGrid data={data} loading={loading} maxRevenue={maxRevenue} />
+    </Page>
+  )
+}
+
+// ─── ESTOQUE TAB ──────────────────────────────────────────────
+
+function EstoqueTab() {
+  const [file, setFile] = React.useState<File | null>(null)
+  const [products, setProducts] = React.useState<CsvProduct[]>([])
+  const [importing, setImporting] = React.useState(false)
+  const [done, setDone] = React.useState(0)
+  const [total, setTotal] = React.useState(0)
+  const [errors, setErrors] = React.useState<string[]>([])
+  const [finished, setFinished] = React.useState(false)
+  const fileRef = React.useRef<HTMLInputElement>(null)
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setFile(f)
+    setProducts([])
+    setFinished(false)
+    setErrors([])
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const text = ev.target?.result as string
+      const parsed = parseCsvProducts(text)
+      setProducts(parsed)
+    }
+    reader.readAsText(f, 'UTF-8')
+  }
+
+  const handleImport = async () => {
+    if (!products.length) return
+    setImporting(true)
+    setDone(0)
+    setTotal(products.length)
+    setErrors([])
+    setFinished(false)
+
+    // Busca todos os menu_items existentes para checar duplicatas pelo nome
+    const { data: existing } = await supabase
+      .from('menu_items')
+      .select('id, name')
+    const existingMap: Record<string, string> = {}
+    for (const item of existing ?? []) {
+      existingMap[item.name.trim().toLowerCase()] = item.id
+    }
+
+    const errs: string[] = []
+    let count = 0
+
+    for (const p of products) {
+      const category = mapCategoria(p.categoria)
+      // Preços absurdos (placeholder do ERP) viram 0
+      const price = p.valor > 99999 ? 0 : p.valor
+
+      const payload = {
+        name: p.nome,
+        category,
+        description: '',
+        price,
+        image_url: '',
+        available: p.disponivel,
+        weight_mode: false,
+        sort_order: 0,
+      }
+
+      const existingId = existingMap[p.nome.trim().toLowerCase()]
+      let err: string | null = null
+
+      if (existingId) {
+        // Atualiza se já existe
+        const { error } = await supabase
+          .from('menu_items')
+          .update(payload)
+          .eq('id', existingId)
+        if (error) err = `${p.nome}: ${error.message}`
+      } else {
+        // Insere novo
+        const { error } = await supabase
+          .from('menu_items')
+          .insert(payload)
+        if (error) err = `${p.nome}: ${error.message}`
+      }
+
+      if (err) errs.push(err)
+      count++
+      setDone(count)
+    }
+
+    setErrors(errs)
+    setImporting(false)
+    setFinished(true)
+  }
+
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+
+  return (
+    <Page
+      title="Importar Estoque"
+      subtitle="Importe seu relatório do ERP e sincronize o cardápio automaticamente"
+    >
+      {/* Upload */}
+      <SectionCard style={{ marginBottom: '20px' }}>
+        <div style={{ padding: '24px' }}>
+          <div
+            onClick={() => fileRef.current?.click()}
+            style={{
+              border: `2px dashed ${file ? 'var(--brand-gold)' : 'var(--border-medium)'}`,
+              borderRadius: '12px', padding: '40px',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
+              cursor: 'pointer', transition: 'border-color 0.2s',
+              background: file ? 'rgba(199,173,112,0.04)' : 'transparent'
+            }}
+          >
+            <Upload size={32} style={{ color: file ? 'var(--brand-gold)' : 'var(--text-dim)' }} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '16px', color: file ? 'var(--brand-gold)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                {file ? file.name : 'Clique para selecionar o CSV'}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                {file ? `${products.length} produto(s) encontrado(s)` : 'Arquivo rel_dinamico exportado do ERP'}
+              </div>
+            </div>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} style={{ display: 'none' }} />
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Preview */}
+      {products.length > 0 && !finished && (
+        <SectionCard style={{ marginBottom: '20px' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-primary)' }}>
+              Preview — {products.length} produto(s)
+            </h3>
+            <GoldButton onClick={handleImport} disabled={importing}>
+              <Save size={14} />
+              {importing ? `Importando... ${done}/${total}` : 'Importar tudo'}
+            </GoldButton>
+          </div>
+
+          {/* Barra de progresso */}
+          {importing && (
+            <div style={{ padding: '12px 20px' }}>
+              <div style={{ height: '6px', background: 'var(--surface-3)', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: 'var(--brand-gold)', width: `${pct}%`, transition: 'width 0.2s', borderRadius: '3px' }} />
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', textAlign: 'right' }}>{pct}%</div>
+            </div>
+          )}
+
+          <div style={{ maxHeight: '340px', overflowY: 'auto' }}>
+            {products.slice(0, 200).map((p, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                padding: '10px 20px',
+                borderBottom: i < products.length - 1 ? '1px solid var(--border-subtle)' : 'none'
+              }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '6px', background: 'rgba(183,53,39,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span style={{ fontSize: '9px', fontWeight: 700, fontFamily: 'var(--font-display)', color: 'var(--brand-red)', textTransform: 'uppercase' }}>
+                    {mapCategoria(p.categoria)[0]}
+                  </span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.nome}
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {mapCategoria(p.categoria)} • {p.categoria}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '14px', fontWeight: 700, color: p.valor > 99999 ? 'var(--text-dim)' : 'var(--brand-gold)' }}>
+                    {p.valor > 99999 ? 'A definir' : `R$ ${p.valor.toFixed(2).replace('.', ',')}`}
+                  </div>
+                  <div style={{ fontSize: '9px', color: p.disponivel ? '#5dba75' : 'var(--brand-red)', fontWeight: 700, textTransform: 'uppercase' }}>
+                    {p.disponivel ? 'Disponível' : 'Inativo'}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {products.length > 200 && (
+              <div style={{ padding: '12px 20px', textAlign: 'center', fontSize: '11px', color: 'var(--text-dim)' }}>
+                ... e mais {products.length - 200} produtos (todos serão importados)
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Resultado */}
+      {finished && (
+        <SectionCard>
+          <div style={{ padding: '32px', textAlign: 'center' }}>
+            <CheckCircle size={40} style={{ color: errors.length === 0 ? '#5dba75' : 'var(--brand-gold)', marginBottom: '12px' }} />
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '22px', textTransform: 'uppercase', color: 'var(--text-primary)', marginBottom: '6px' }}>
+              {errors.length === 0 ? 'Importação concluída!' : 'Importação com avisos'}
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+              {done - errors.length} produto(s) importado(s) com sucesso
+              {errors.length > 0 && `, ${errors.length} com erro`}
+            </div>
+            {errors.length > 0 && (
+              <div style={{ marginTop: '16px', textAlign: 'left', background: 'rgba(183,53,39,0.08)', borderRadius: '8px', padding: '12px', maxHeight: '200px', overflowY: 'auto' }}>
+                {errors.map((e, i) => (
+                  <div key={i} style={{ fontSize: '11px', color: 'var(--brand-red)', marginBottom: '4px' }}>{e}</div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: '20px' }}>
+              <GhostButton onClick={() => { setFile(null); setProducts([]); setFinished(false); setErrors([]) }}>
+                Importar outro arquivo
+              </GhostButton>
+            </div>
+          </div>
+        </SectionCard>
+      )}
     </Page>
   )
 }
