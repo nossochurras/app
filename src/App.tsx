@@ -1683,6 +1683,14 @@ function CheckoutScreen({ location, cartTotal, deliveryFee = 0, onBack, onFinali
   const [couponError, setCouponError] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
 
+  const isDelivery = isDeliveryLocation(location);
+
+  useEffect(() => {
+    if (isDelivery && paymentType === 'local') {
+      setPaymentType('app');
+    }
+  }, [isDelivery, paymentType]);
+
   const discount = coupon
     ? coupon.type === 'fixed' ? Number(coupon.discount_value)
     : coupon.type === 'percent' ? Math.round((cartTotal * Number(coupon.discount_value) / 100) * 100) / 100
@@ -1748,9 +1756,12 @@ function CheckoutScreen({ location, cartTotal, deliveryFee = 0, onBack, onFinali
         <div>
           <h3 className="text-xl font-bold text-brand-dark mb-4">Escolha a forma de pagamento</h3>
           <p className="text-sm text-brand-dark/70 mb-6 border-b border-brand-gold/20 pb-4">
-            Você pode pagar agora pelo App com Cartão/PIX, ou pagar no momento da {location === 'Retirada no Balcão' ? 'retirada' : 'entrega'}.
+            {isDelivery
+              ? 'Para pedidos entregues na churrasqueira, o pagamento é feito agora pelo App com Cartão ou PIX.'
+              : 'Você pode pagar agora pelo App com Cartão/PIX, ou pagar no momento da retirada.'}
             {deliveryFee > 0 && ' Sua taxa para levar o churrasco até a churrasqueira já está incluída no total abaixo.'}
           </p>
+
 
           <div className="space-y-4">
             <button
@@ -1769,21 +1780,23 @@ function CheckoutScreen({ location, cartTotal, deliveryFee = 0, onBack, onFinali
               </div>
             </button>
 
-            <button
-              onClick={() => setPaymentType('local')}
-              className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${paymentType === 'local' ? 'border-brand-red bg-white shadow-lg' : 'border-brand-gold/20 bg-transparent hover:bg-white/50'}`}
-            >
-              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${paymentType === 'local' ? 'border-brand-red' : 'border-brand-gold'}`}>
-                {paymentType === 'local' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full" />}
-              </div>
-              <div className="flex-1 text-left">
-                <div className="font-bold text-brand-dark">Pagar {location === 'Retirada no Balcão' ? 'na Retirada' : 'no Local'}</div>
-                <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
-                  <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
-                  <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Benefício</span>
+            {!isDelivery && (
+              <button
+                onClick={() => setPaymentType('local')}
+                className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${paymentType === 'local' ? 'border-brand-red bg-white shadow-lg' : 'border-brand-gold/20 bg-transparent hover:bg-white/50'}`}
+              >
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${paymentType === 'local' ? 'border-brand-red' : 'border-brand-gold'}`}>
+                  {paymentType === 'local' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full" />}
                 </div>
-              </div>
-            </button>
+                <div className="flex-1 text-left">
+                  <div className="font-bold text-brand-dark">Pagar na Retirada</div>
+                  <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
+                    <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
+                    <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Benefício</span>
+                  </div>
+                </div>
+              </button>
+            )}
           </div>
         </div>
 
