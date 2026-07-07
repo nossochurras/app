@@ -31,6 +31,7 @@ import AdminPanel from './AdminPanel'
 // ─── FIDELITY HELPERS ───────────────────────────────────────────
 
 const FIDELITY_GOAL = 900;
+const DELIVERY_FEE = 10;
 
 async function ensureFidelityRecord(userId: string) {
   const { data } = await supabase
@@ -113,6 +114,10 @@ type DynamicMenuItem = {
 }
 
 const LOCATIONS = Array.from({ length: 10 }, (_, i) => `Churrasqueira ${i + 1}`);
+
+function isDeliveryLocation(location: string) {
+  return location !== '' && location !== 'Retirada no Balcão';
+}
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
@@ -494,6 +499,7 @@ export default function App() {
   
   const cartTotal = cart.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0);
   const cartCount = cart.reduce((acc, curr) => acc + curr.quantity, 0);
+  const deliveryFee = isDeliveryLocation(location) ? DELIVERY_FEE : 0;
 
   return (
     <div className="font-sans min-h-screen bg-brand-cream text-brand-dark selection:bg-brand-red selection:text-white pb-safe max-w-md mx-auto shadow-2xl relative bg-[url('https://www.transparenttextures.com/patterns/rice-paper-2.png')] overflow-hidden">
@@ -911,15 +917,17 @@ export default function App() {
           <CheckoutScreen
             location={location}
             cartTotal={weighedTotal !== null ? weighedTotal : cartTotal}
+            deliveryFee={deliveryFee}
             onBack={() => setView('cart')}
             onFinalize={async (paymentType: 'app' | 'local', coupon?: any) => {
               if (awaitingWeighingOrderId) {
+                const baseTotal = weighedTotal !== null ? weighedTotal : cartTotal;
                 const discountAmount = coupon
                   ? coupon.type === 'fixed' ? Number(coupon.discount_value)
-                  : coupon.type === 'percent' ? Math.round((cartTotal * Number(coupon.discount_value) / 100) * 100) / 100
+                  : coupon.type === 'percent' ? Math.round((baseTotal * Number(coupon.discount_value) / 100) * 100) / 100
                   : 0
                   : 0;
-                const finalTotal = Math.max((weighedTotal !== null ? weighedTotal : cartTotal) - discountAmount, 0);
+                const finalTotal = Math.max(baseTotal + deliveryFee - discountAmount, 0);
               
                 await supabase.from('orders').update({
                   payment_type: paymentType,
@@ -966,7 +974,7 @@ export default function App() {
                 : coupon.type === 'percent' ? Math.round((cartTotal * Number(coupon.discount_value) / 100) * 100) / 100
                 : 0
                 : 0;
-              const finalTotal = Math.max(cartTotal - discountAmount, 0);
+              const finalTotal = Math.max(cartTotal + deliveryFee - discountAmount, 0);
 
               if (user?.id) {
                 const { data: insertedOrder, error } = await supabase   // <-- captura data
@@ -988,6 +996,7 @@ export default function App() {
                       real_grams: null,
                     })),
                     total: finalTotal,
+                    delivery_fee: deliveryFee,
                     payment_type: paymentType,
                     order_code: code,
                     status: 'pending',
@@ -1667,7 +1676,7 @@ function CartScreen({ cart, location, cartTotal, onBack, onAdd, onRemove, onChec
   );
 }
 
-function CheckoutScreen({ location, cartTotal, onBack, onFinalize }: any) {
+function CheckoutScreen({ location, cartTotal, deliveryFee = 0, onBack, onFinalize }: any) {
   const [paymentType, setPaymentType] = useState<'app' | 'local'>('app');
   const [couponCode, setCouponCode] = useState('');
   const [coupon, setCoupon] = useState<any>(null);
@@ -1680,7 +1689,7 @@ function CheckoutScreen({ location, cartTotal, onBack, onFinalize }: any) {
     : 0
     : 0;
 
-  const finalTotal = Math.max(cartTotal - discount, 0);
+  const finalTotal = Math.max(cartTotal + deliveryFee - discount, 0);
 
   const handleApplyCoupon = async () => {
     setCouponError('');
@@ -1740,6 +1749,7 @@ function CheckoutScreen({ location, cartTotal, onBack, onFinalize }: any) {
           <h3 className="text-xl font-bold text-brand-dark mb-4">Escolha a forma de pagamento</h3>
           <p className="text-sm text-brand-dark/70 mb-6 border-b border-brand-gold/20 pb-4">
             Você pode pagar agora pelo App com Cartão/PIX, ou pagar no momento da {location === 'Retirada no Balcão' ? 'retirada' : 'entrega'}.
+            {deliveryFee > 0 && ' Sua taxa para levar o churrasco até a churrasqueira já está incluída no total abaixo.'}
           </p>
 
           <div className="space-y-4">
@@ -1820,6 +1830,12 @@ function CheckoutScreen({ location, cartTotal, onBack, onFinalize }: any) {
             <span>Subtotal</span>
             <span>R$ {cartTotal.toFixed(2).replace('.', ',')}</span>
           </div>
+          {deliveryFee > 0 && (
+            <div className="flex justify-between items-center mb-2 text-brand-cream/60 text-sm">
+              <span>Taxa para levar até sua brasa</span>
+              <span>R$ {deliveryFee.toFixed(2).replace('.', ',')}</span>
+            </div>
+          )}
           {discount > 0 && (
             <div className="flex justify-between items-center mb-2 text-green-400 text-sm">
               <span>Desconto ({coupon.code})</span>
