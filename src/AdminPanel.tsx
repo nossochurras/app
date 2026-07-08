@@ -7,7 +7,8 @@ import {
   Plus, Edit2, Trash2, Upload, Save,
   Camera, TrendingUp, Users, DollarSign,
   ArrowRight, Eye, RefreshCw, Search,
-  Scale, ToggleLeft, ToggleRight, Image, Flame
+  Scale, ToggleLeft, ToggleRight, Image, Flame,
+  MessageCircle, Send, Check, CheckCheck
 } from 'lucide-react'
 
 // ─── BRAND TOKENS ────────────────────────────────────────────
@@ -29,6 +30,8 @@ type AdminPermissions = {
   manage_coupons?: boolean
   view_reports?: boolean
   manage_admins?: boolean
+  view_chat?: boolean
+  manage_chat?: boolean
 }
 
 type Profile = {
@@ -281,8 +284,9 @@ const globalStyle = `
 export default function AdminPanel() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'menu' | 'coupons' | 'reports' | 'estoque' | 'team'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'menu' | 'coupons' | 'reports' | 'estoque' | 'team' | 'chat'>('dashboard')
   const [newOrderCount, setNewOrderCount] = useState(0)
+  const [newChatCount, setNewChatCount] = useState(0)
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -305,6 +309,27 @@ export default function AdminPanel() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
+  useEffect(() => {
+    // Busca contagem inicial de mensagens não lidas
+    supabase
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender', 'user')
+      .eq('read_by_admin', false)
+      .then(({ count }) => setNewChatCount(count ?? 0))
+
+    const channel = supabase
+      .channel('admin-chat')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+        if (payload.new.sender === 'user') {
+          setNewChatCount(c => c + 1)
+          playNotificationSound()
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
   const isMobile = useIsMobile()
   const [drawerOpen, setDrawerOpen] = React.useState(false)
 
@@ -312,6 +337,7 @@ export default function AdminPanel() {
   const handleTabChange = (tab: any) => {
     setActiveTab(tab)
     if (tab === 'orders') setNewOrderCount(0)
+    if (tab === 'chat') setNewChatCount(0)
     setDrawerOpen(false)
   }
 
@@ -351,6 +377,7 @@ export default function AdminPanel() {
         {[
           { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard',   perm: 'view_dashboard' as keyof AdminPermissions },
           { id: 'orders',    icon: ShoppingBag,     label: 'Pedidos',     perm: 'view_orders' as keyof AdminPermissions,    badge: newOrderCount > 0 ? newOrderCount : null },
+          { id: 'chat',      icon: MessageCircle,   label: 'Chat',        perm: 'view_chat' as keyof AdminPermissions,      badge: newChatCount > 0 ? newChatCount : null },
           { id: 'menu',      icon: UtensilsCrossed, label: 'Cardápio',    perm: 'view_menu' as keyof AdminPermissions },
           { id: 'coupons',   icon: Ticket,          label: 'Cupons',      perm: 'view_coupons' as keyof AdminPermissions },
           { id: 'reports',   icon: BarChart2,       label: 'Relatórios',  perm: 'view_reports' as keyof AdminPermissions },
@@ -527,6 +554,7 @@ export default function AdminPanel() {
             <AnimatePresence mode="wait">
               {activeTab === 'dashboard' && <DashboardTab key="dashboard" onNavigate={handleTabChange} />}
               {activeTab === 'orders'    && <OrdersTab    key="orders" profile={profile!} />}
+              {activeTab === 'chat'      && <ChatTab      key="chat"   profile={profile!} />}
               {activeTab === 'menu'      && <MenuTab      key="menu"   profile={profile!} />}
               {activeTab === 'coupons'   && <CouponsTab   key="coupons" profile={profile!} />}
               {activeTab === 'reports'   && <ReportsTab   key="reports" />}
@@ -2833,6 +2861,8 @@ const ALL_PERMISSIONS: { key: keyof AdminPermissions; label: string; group: stri
   { key: 'view_dashboard',   label: 'Ver Dashboard',      group: 'Dashboard' },
   { key: 'view_orders',      label: 'Ver Pedidos',         group: 'Pedidos' },
   { key: 'manage_orders',    label: 'Gerenciar Pedidos',   group: 'Pedidos' },
+  { key: 'view_chat',        label: 'Ver Chat',            group: 'Chat' },
+  { key: 'manage_chat',      label: 'Responder Chat',      group: 'Chat' },
   { key: 'view_menu',        label: 'Ver Cardápio',        group: 'Cardápio' },
   { key: 'manage_menu',      label: 'Editar Cardápio',     group: 'Cardápio' },
   { key: 'view_coupons',     label: 'Ver Cupons',          group: 'Cupons' },
@@ -3146,5 +3176,416 @@ function TeamTab() {
         </div>
       </SectionCard>
     </Page>
+  )
+}
+
+// ─── CHAT TAB (estilo WhatsApp Web) ───────────────────────────
+
+type ChatMessage = {
+  id: string
+  user_id: string
+  sender: 'user' | 'admin'
+  admin_id: string | null
+  body: string
+  read_by_admin: boolean
+  read_by_user: boolean
+  created_at: string
+}
+
+type ChatConversation = {
+  user_id: string
+  full_name: string
+  last_message: string
+  last_message_at: string
+  unread_count: number
+}
+
+function ChatTab({ profile }: { profile: Profile }) {
+  const isMobile = useIsMobile()
+  const [conversations, setConversations] = useState<ChatConversation[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+
+  const fetchConversations = useCallback(async () => {
+    setLoading(true)
+    // Busca todas as mensagens (ordenadas), depois agrupa por user_id no client.
+    // Para volumes grandes isso deveria virar uma view/RPC no banco, mas para o
+    // volume de um chat de suporte de restaurante isso é perfeitamente viável.
+    const { data: messages } = await supabase
+      .from('chat_messages')
+      .select('user_id, sender, body, created_at, read_by_admin')
+      .order('created_at', { ascending: false })
+
+    if (!messages) { setConversations([]); setLoading(false); return }
+
+    const grouped = new Map<string, ChatConversation>()
+    const unreadCount = new Map<string, number>()
+
+    for (const m of messages) {
+      if (!grouped.has(m.user_id)) {
+        grouped.set(m.user_id, {
+          user_id: m.user_id,
+          full_name: '',
+          last_message: m.body,
+          last_message_at: m.created_at,
+          unread_count: 0,
+        })
+      }
+      if (m.sender === 'user' && !m.read_by_admin) {
+        unreadCount.set(m.user_id, (unreadCount.get(m.user_id) ?? 0) + 1)
+      }
+    }
+
+    const userIds = Array.from(grouped.keys())
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds)
+      for (const p of profiles ?? []) {
+        const conv = grouped.get(p.id)
+        if (conv) conv.full_name = p.full_name ?? 'Cliente'
+      }
+    }
+
+    for (const [uid, conv] of grouped) {
+      conv.unread_count = unreadCount.get(uid) ?? 0
+    }
+
+    setConversations(Array.from(grouped.values()).sort((a, b) =>
+      new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+    ))
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { fetchConversations() }, [fetchConversations])
+
+  // Realtime: qualquer INSERT novo atualiza a lista de conversas
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-chat-list')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, fetchConversations)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchConversations])
+
+  const filtered = conversations.filter(c =>
+    !search || c.full_name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const selectedConv = conversations.find(c => c.user_id === selectedUserId) ?? null
+
+  return (
+    <Page title="Chat" subtitle="Converse com os clientes em tempo real">
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '340px 1fr', gap: '16px', height: isMobile ? 'auto' : 'calc(100vh - 220px)' }}>
+
+        {/* ── LISTA DE CONVERSAS (esconde em mobile quando há seleção) ── */}
+        {(!isMobile || !selectedUserId) && (
+          <SectionCard style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar cliente..."
+                  style={{ width: '100%', padding: '8px 12px 8px 30px', fontSize: '12px' }}
+                />
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {loading && (
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
+                  Carregando conversas...
+                </div>
+              )}
+              {!loading && filtered.length === 0 && (
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
+                  Nenhuma conversa ainda.
+                </div>
+              )}
+              {filtered.map(conv => {
+                const isSelected = selectedUserId === conv.user_id
+                return (
+                  <button
+                    key={conv.user_id}
+                    onClick={() => setSelectedUserId(conv.user_id)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
+                      padding: '12px 16px', textAlign: 'left', cursor: 'pointer',
+                      background: isSelected ? 'rgba(183,53,39,0.1)' : 'transparent',
+                      border: 'none', borderBottom: '1px solid var(--border-subtle)',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <div style={{
+                      width: '38px', height: '38px', borderRadius: '50%', flexShrink: 0,
+                      background: 'rgba(183,53,39,0.15)', border: '1px solid rgba(183,53,39,0.3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '14px', fontWeight: 700, color: 'var(--brand-red)',
+                      fontFamily: 'var(--font-display)'
+                    }}>
+                      {conv.full_name?.[0]?.toUpperCase() ?? '?'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <span style={{
+                          fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                        }}>
+                          {conv.full_name || 'Cliente'}
+                        </span>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', flexShrink: 0 }}>
+                          {new Date(conv.last_message_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginTop: '2px' }}>
+                        <span style={{
+                          fontSize: '12px', color: 'var(--text-dim)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                        }}>
+                          {conv.last_message}
+                        </span>
+                        {conv.unread_count > 0 && (
+                          <span style={{
+                            background: 'var(--brand-red)', color: 'var(--brand-cream)',
+                            fontSize: '10px', fontWeight: 700, minWidth: '18px', height: '18px',
+                            borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            padding: '0 5px', flexShrink: 0
+                          }}>
+                            {conv.unread_count}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </SectionCard>
+        )}
+
+        {/* ── PAINEL DE CONVERSA ── */}
+        {(!isMobile || selectedUserId) && (
+          selectedConv ? (
+            <ChatConversationPanel
+              key={selectedConv.user_id}
+              conversation={selectedConv}
+              profile={profile}
+              onBack={() => setSelectedUserId(null)}
+              onMessagesRead={fetchConversations}
+              isMobile={isMobile}
+            />
+          ) : (
+            <SectionCard style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: '10px', color: 'var(--text-dim)', minHeight: '300px'
+            }}>
+              <MessageCircle size={28} style={{ opacity: 0.3 }} />
+              <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: 'var(--font-display)' }}>
+                Selecione uma conversa
+              </span>
+            </SectionCard>
+          )
+        )}
+      </div>
+    </Page>
+  )
+}
+
+function ChatConversationPanel({ conversation, profile, onBack, onMessagesRead, isMobile }: {
+  conversation: ChatConversation
+  profile: Profile
+  onBack: () => void
+  onMessagesRead: () => void
+  isMobile: boolean
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const canReply = profile.role === 'super_admin' || !!profile.permissions?.manage_chat
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const fetchMessages = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('user_id', conversation.user_id)
+      .order('created_at', { ascending: true })
+    setMessages(data ?? [])
+    setLoading(false)
+
+    // Marca mensagens do cliente como lidas
+    await supabase
+      .from('chat_messages')
+      .update({ read_by_admin: true })
+      .eq('user_id', conversation.user_id)
+      .eq('sender', 'user')
+      .eq('read_by_admin', false)
+
+    onMessagesRead()
+  }, [conversation.user_id])
+
+  useEffect(() => { fetchMessages() }, [fetchMessages])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`admin-chat-conv-${conversation.user_id}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'chat_messages',
+        filter: `user_id=eq.${conversation.user_id}`,
+      }, (payload) => {
+        setMessages(prev => [...prev, payload.new as ChatMessage])
+        if ((payload.new as ChatMessage).sender === 'user') {
+          supabase
+            .from('chat_messages')
+            .update({ read_by_admin: true })
+            .eq('id', (payload.new as ChatMessage).id)
+            .then(() => onMessagesRead())
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [conversation.user_id])
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+  }, [messages])
+
+  const handleSend = async () => {
+    if (!input.trim() || sending || !canReply) return
+    setSending(true)
+    const body = input.trim()
+    setInput('')
+
+    const { data: { user } } = await supabase.auth.getUser()
+
+    await supabase.from('chat_messages').insert({
+      user_id: conversation.user_id,
+      sender: 'admin',
+      admin_id: user?.id ?? null,
+      body,
+      read_by_admin: true,
+      read_by_user: false,
+    })
+
+    setSending(false)
+  }
+
+  return (
+    <SectionCard style={{ display: 'flex', flexDirection: 'column', minHeight: isMobile ? '70vh' : undefined }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)',
+        background: 'rgba(183,53,39,0.06)'
+      }}>
+        {isMobile && (
+          <button
+            onClick={onBack}
+            style={{
+              background: 'transparent', border: 'none', color: 'var(--text-muted)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px'
+            }}
+          >
+            <ArrowRight size={18} style={{ transform: 'rotate(180deg)' }} />
+          </button>
+        )}
+        <div style={{
+          width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
+          background: 'rgba(183,53,39,0.15)', border: '1px solid rgba(183,53,39,0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '13px', fontWeight: 700, color: 'var(--brand-red)',
+          fontFamily: 'var(--font-display)'
+        }}>
+          {conversation.full_name?.[0]?.toUpperCase() ?? '?'}
+        </div>
+        <div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+            {conversation.full_name || 'Cliente'}
+          </div>
+        </div>
+      </div>
+
+      {/* Mensagens */}
+      <div
+        ref={scrollRef}
+        style={{
+          flex: 1, overflowY: 'auto', padding: '18px',
+          display: 'flex', flexDirection: 'column', gap: '10px',
+          minHeight: isMobile ? '50vh' : '300px'
+        }}
+      >
+        {loading && (
+          <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px', padding: '20px' }}>
+            Carregando mensagens...
+          </div>
+        )}
+        {!loading && messages.length === 0 && (
+          <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px', padding: '20px' }}>
+            Nenhuma mensagem ainda.
+          </div>
+        )}
+        {messages.map(m => {
+          const isAdmin = m.sender === 'admin'
+          return (
+            <div
+              key={m.id}
+              style={{
+                alignSelf: isAdmin ? 'flex-end' : 'flex-start',
+                maxWidth: '75%',
+                display: 'flex', flexDirection: 'column', gap: '2px'
+              }}
+            >
+              <div style={{
+                padding: '10px 14px', borderRadius: isAdmin ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                background: isAdmin ? 'var(--brand-red)' : 'rgba(255,240,222,0.08)',
+                color: isAdmin ? 'var(--brand-cream)' : 'var(--text-primary)',
+                fontSize: '13px', lineHeight: 1.4, wordBreak: 'break-word'
+              }}>
+                {m.body}
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                fontSize: '10px', color: 'var(--text-dim)',
+                alignSelf: isAdmin ? 'flex-end' : 'flex-start'
+              }}>
+                {new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                {isAdmin && (m.read_by_user ? <CheckCheck size={12} style={{ color: 'var(--brand-gold)' }} /> : <Check size={12} />)}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: '14px 18px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: '10px' }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSend()}
+          placeholder={canReply ? 'Digite sua mensagem...' : 'Você não tem permissão para responder'}
+          disabled={!canReply}
+          style={{ flex: 1, padding: '10px 14px', fontSize: '13px' }}
+        />
+        <button
+          onClick={handleSend}
+          disabled={!input.trim() || sending || !canReply}
+          style={{
+            width: '40px', height: '40px', borderRadius: '10px', flexShrink: 0,
+            background: !input.trim() || sending || !canReply ? 'rgba(183,53,39,0.2)' : 'var(--brand-red)',
+            border: 'none', color: 'var(--brand-cream)',
+            cursor: !input.trim() || sending || !canReply ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: !input.trim() || sending || !canReply ? 0.5 : 1, transition: 'all 0.15s'
+          }}
+        >
+          <Send size={16} />
+        </button>
+      </div>
+    </SectionCard>
   )
 }
