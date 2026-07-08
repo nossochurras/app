@@ -3476,7 +3476,7 @@ function ChatConversationPanel({ conversation, profile, onBack, onMessagesRead, 
   }
 
   return (
-    <SectionCard style={{ display: 'flex', flexDirection: 'column', minHeight: isMobile ? '70vh' : undefined }}>
+    <SectionCard style={{ display: 'flex', flexDirection: 'column', height: isMobile ? '70vh' : '100%', minHeight: 0 }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: '12px',
@@ -3514,9 +3514,9 @@ function ChatConversationPanel({ conversation, profile, onBack, onMessagesRead, 
       <div
         ref={scrollRef}
         style={{
-          flex: 1, overflowY: 'auto', padding: '18px',
+          flex: '1 1 0', overflowY: 'auto', padding: '18px',
           display: 'flex', flexDirection: 'column', gap: '10px',
-          minHeight: isMobile ? '50vh' : '300px'
+          minHeight: 0
         }}
       >
         {loading && (
