@@ -25,6 +25,9 @@ import {
   ChevronRight,
   LogOut,
   Scale,
+  Send,
+  Check,
+  CheckCheck,
 } from 'lucide-react';
 import AdminPanel from './AdminPanel'
 
@@ -1048,6 +1051,7 @@ export default function App() {
         {/* SUPPORT SCREEN */}
         {view === 'support' && (
           <SupportScreen
+            user={user}
             cartCount={cartCount}
             onBack={() => setView('menu')}
             onNavigate={(tab: string) => {
@@ -2032,23 +2036,84 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
   );
 }
 
-function SupportScreen({ cartCount, onNavigate, onBack }: any) {
-  const [messages, setMessages] = useState([
-    { id: 1, text: 'Olá! Como podemos ajudar o seu churras hoje?', sender: 'restaurante', time: '10:00' }
-  ]);
+function SupportScreen({ user, cartCount, onNavigate, onBack }: any) {
+  const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
 
-  const handleSend = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!user?.id) { setLoading(false); return; }
+
+    supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data) setMessages(data);
+        setLoading(false);
+      });
+
+    // Marca como lidas as mensagens do admin ainda não vistas pelo cliente
+    supabase
+      .from('chat_messages')
+      .update({ read_by_user: true })
+      .eq('user_id', user.id)
+      .eq('sender', 'admin')
+      .eq('read_by_user', false)
+      .then(() => {});
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`user-chat-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          setMessages(prev => [...prev, payload.new]);
+          if (payload.new.sender === 'admin') {
+            supabase
+              .from('chat_messages')
+              .update({ read_by_user: true })
+              .eq('id', payload.new.id)
+              .then(() => {});
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
-    
-    const newMsg = { id: Date.now(), text: input, sender: 'user', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
-    setMessages(prev => [...prev, newMsg]);
+    if (!input.trim() || !user?.id || sending) return;
+
+    setSending(true);
+    const body = input.trim();
     setInput('');
-    
-    setTimeout(() => {
-      setMessages(prev => [...prev, { id: Date.now() + 1, text: 'Nossa equipe já vai te responder, aguarde um minutinho!', sender: 'restaurante', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
-    }, 1500);
+
+    await supabase.from('chat_messages').insert({
+      user_id: user.id,
+      sender: 'user',
+      body,
+      read_by_admin: false,
+      read_by_user: true,
+    });
+
+    setSending(false);
   };
 
   return (
@@ -2075,15 +2140,35 @@ function SupportScreen({ cartCount, onNavigate, onBack }: any) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto mb-4 hide-scrollbar flex flex-col gap-4 pb-20">
-         {messages.map(msg => (
-           <div key={msg.id} className={`flex flex-col max-w-[80%] ${msg.sender === 'user' ? 'self-end items-end' : 'self-start items-start'}`}>
-             <div className={`p-4 rounded-2xl ${msg.sender === 'user' ? 'bg-brand-red text-white rounded-br-none' : 'bg-white border border-brand-gold/20 text-brand-dark rounded-bl-none shadow-sm'}`}>
-               <p className="text-sm">{msg.text}</p>
-             </div>
-             <span className="text-[10px] text-brand-dark/40 mt-1">{msg.time}</span>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto mb-4 hide-scrollbar flex flex-col gap-4 pb-20">
+         {loading && (
+           <p className="text-center text-brand-dark/40 text-sm mt-8">Carregando conversa...</p>
+         )}
+         {!loading && messages.length === 0 && (
+           <div className="flex flex-col items-center justify-center h-full text-brand-dark/40 gap-2">
+             <MessageCircle size={40} className="opacity-30" />
+             <p className="text-sm font-bold">Envie sua primeira mensagem</p>
+             <p className="text-xs text-center max-w-[220px]">Nossa equipe vai te responder por aqui.</p>
            </div>
-         ))}
+         )}
+         {messages.map(msg => {
+           const isUser = msg.sender === 'user';
+           return (
+             <div key={msg.id} className={`flex flex-col max-w-[80%] ${isUser ? 'self-end items-end' : 'self-start items-start'}`}>
+               <div className={`p-4 rounded-2xl ${isUser ? 'bg-brand-red text-white rounded-br-none' : 'bg-white border border-brand-gold/20 text-brand-dark rounded-bl-none shadow-sm'}`}>
+                 <p className="text-sm">{msg.body}</p>
+               </div>
+               <span className="text-[10px] text-brand-dark/40 mt-1 flex items-center gap-1">
+                 {new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                 {isUser && (
+                   msg.read_by_admin
+                     ? <CheckCheck size={12} className="text-brand-gold" />
+                     : <Check size={12} className="text-brand-dark/30" />
+                 )}
+               </span>
+             </div>
+           );
+         })}
       </div>
 
       <div className="fixed bottom-[80px] left-0 right-0 px-6 z-40">
@@ -2093,10 +2178,11 @@ function SupportScreen({ cartCount, onNavigate, onBack }: any) {
             value={input}
             onChange={e => setInput(e.target.value)}
             placeholder="Digite sua mensagem..." 
-            className="w-full bg-white border border-brand-gold/30 rounded-full py-4 pl-6 pr-14 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:outline-none focus:ring-2 focus:ring-[#25D366]/50 shadow-sm"
+            disabled={!user?.id}
+            className="w-full bg-white border border-brand-gold/30 rounded-full py-4 pl-6 pr-14 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:outline-none focus:ring-2 focus:ring-[#25D366]/50 shadow-sm disabled:opacity-60"
           />
-          <button type="submit" disabled={!input.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 bg-[#25D366] text-white w-10 h-10 rounded-full flex items-center justify-center shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
-            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="translate-x-[-1px] translate-y-[1px]"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          <button type="submit" disabled={!input.trim() || sending || !user?.id} className="absolute right-2 top-1/2 -translate-y-1/2 bg-[#25D366] text-white w-10 h-10 rounded-full flex items-center justify-center shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+            <Send size={16} className="translate-x-[-1px]" />
           </button>
         </form>
       </div>
