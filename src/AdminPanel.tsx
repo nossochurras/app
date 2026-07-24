@@ -1131,6 +1131,7 @@ function OrdersTab({ profile }: { profile: Profile }) {
       </div>
 
       <OrdersGrid profile={profile} orders={filtered} selected={selected} setSelected={setSelected} advanceStatus={advanceStatus} fetchOrders={refreshOrdersAndSelected} />
+    </Page>
   )
 }
 
