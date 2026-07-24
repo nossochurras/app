@@ -184,13 +184,14 @@ type Order = {
 // ─── STATUS CONFIG ────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; next: string | null }> = {
-  pending:           { label: 'Recebido',        color: '#c7ad70', bg: '#c7ad7022', next: 'preparing' },
-  awaiting_weighing: { label: 'Aguard. Pesagem', color: '#b73527', bg: '#b7352722', next: 'weighing_done' },
-  weighing_done:     { label: 'Pesagem OK',      color: '#c7ad70', bg: '#c7ad7022', next: 'preparing' },
-  preparing:         { label: 'Preparando',      color: '#fff0de', bg: '#fff0de22', next: 'ready' },
-  ready:             { label: 'Pronto!',         color: '#c7ad70', bg: '#c7ad7044', next: 'delivered' },
-  delivered:         { label: 'Entregue',        color: '#6b6b5e', bg: '#6b6b5e22', next: null },
-  cancelled:         { label: 'Cancelado',       color: '#b73527', bg: '#b7352722', next: null },
+  pending:           { label: 'Recebido',          color: '#c7ad70', bg: '#c7ad7022', next: 'preparing' },
+  awaiting_weighing: { label: 'Aguard. Pesagem',    color: '#b73527', bg: '#b7352722', next: 'weighing_done' },
+  weighing_done:     { label: 'Pesagem OK',         color: '#c7ad70', bg: '#c7ad7022', next: 'preparing' },
+  awaiting_payment:  { label: 'Aguard. Pagamento',  color: '#b73527', bg: '#b7352722', next: null },
+  preparing:         { label: 'Preparando',         color: '#fff0de', bg: '#fff0de22', next: 'ready' },
+  ready:             { label: 'Pronto!',            color: '#c7ad70', bg: '#c7ad7044', next: 'delivered' },
+  delivered:         { label: 'Entregue',           color: '#6b6b5e', bg: '#6b6b5e22', next: null },
+  cancelled:         { label: 'Cancelado',          color: '#b73527', bg: '#b7352722', next: null },
   paid: { label: 'Pago', color: '#10b981', bg: '#d1fae5', next: 'preparing' },
 }
 
@@ -1068,10 +1069,10 @@ function OrdersTab({ profile }: { profile: Profile }) {
     return matchStatus && matchSearch
   })
 
-  const advanceStatus = async (order: Order) => {
-    const next = STATUS_CONFIG[order.status]?.next
+  const advanceStatus = async (order: Order, forceStatus?: string) => {
+    const next = forceStatus ?? STATUS_CONFIG[order.status]?.next
     if (!next) return
-    await supabase.from('orders').update({ status: next }).eq('id', order.id)
+    await supabase.from('orders').update({ status: next, payment_status: next === 'preparing' && order.status === 'awaiting_payment' ? 'paid' : undefined }).eq('id', order.id)
     fetchOrders()
     if (selected?.id === order.id) setSelected({ ...order, status: next })
   }
@@ -1125,7 +1126,7 @@ function OrdersTab({ profile }: { profile: Profile }) {
 // ─── ORDER DETAIL ─────────────────────────────────────────────
 
 function OrderDetail({ order, onAdvance, onClose, onRefresh, profile }: {
-  order: Order; onAdvance: (o: Order) => void; onClose: () => void; onRefresh: () => void; profile: Profile
+  order: Order; onAdvance: (o: Order, forceStatus?: string) => void; onClose: () => void; onRefresh: () => void; profile: Profile
 }) {
   const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending
   const nextCfg = cfg.next ? STATUS_CONFIG[cfg.next] : null
@@ -1174,7 +1175,36 @@ function OrderDetail({ order, onAdvance, onClose, onRefresh, profile }: {
           <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Status:</span>
           <StatusBadge status={order.status} />
         </div>
-        {nextCfg && profile.permissions?.manage_orders && (
+
+        {order.status === 'awaiting_payment' && profile.permissions?.manage_orders && (
+          <>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '8px 10px', marginBottom: '8px', borderRadius: '6px',
+              background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.25)',
+              fontSize: '11px', color: 'var(--brand-red)', fontWeight: 600
+            }}>
+              <Clock size={13} style={{ flexShrink: 0 }} />
+              Confirme o pagamento para liberar o preparo do pedido.
+            </div>
+            <button
+              onClick={() => onAdvance(order, 'preparing')}
+              style={{
+                width: '100%', padding: '10px', borderRadius: '8px',
+                background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)',
+                color: '#10b981', cursor: 'pointer',
+                fontFamily: 'var(--font-display)', fontWeight: 700,
+                fontSize: '13px', letterSpacing: '0.5px', textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                transition: 'all 0.15s'
+              }}
+            >
+              <CheckCircle size={14} /> Confirmar Pagamento
+            </button>
+          </>
+        )}
+
+        {order.status !== 'awaiting_payment' && nextCfg && profile.permissions?.manage_orders && (
           <button
             onClick={() => onAdvance(order)}
             style={{
@@ -1312,7 +1342,7 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
         : i
     )
     const allWeighed = updatedItems.filter((i: any) => i.chosen_label).every((i: any) => i.real_grams)
-    const newStatus = allWeighed ? 'weighing_done' : 'awaiting_weighing'
+    const newStatus = allWeighed ? 'awaiting_payment' : 'awaiting_weighing'
     
     await supabase.from('orders').update({ 
       total: newTotal, 
