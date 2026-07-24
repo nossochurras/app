@@ -1132,6 +1132,8 @@ function OrderDetail({ order, onAdvance, onClose, onRefresh, profile }: {
   const nextCfg = cfg.next ? STATUS_CONFIG[cfg.next] : null
   const items: any[] = Array.isArray(order.items) ? order.items : []
   const hasWeightItems = items.some(i => i.weight_mode || i.chosen_label)
+  const pendingWeighing = order.status === 'awaiting_weighing' &&
+    items.filter(i => i.chosen_label).some(i => !i.real_grams)
 
   return (
     <motion.div
@@ -1205,20 +1207,37 @@ function OrderDetail({ order, onAdvance, onClose, onRefresh, profile }: {
         )}
 
         {order.status !== 'awaiting_payment' && nextCfg && profile.permissions?.manage_orders && (
-          <button
-            onClick={() => onAdvance(order)}
-            style={{
-              width: '100%', padding: '10px', borderRadius: '8px',
-              background: `${cfg.color}15`, border: `1px solid ${cfg.color}40`,
-              color: cfg.color, cursor: 'pointer',
-              fontFamily: 'var(--font-display)', fontWeight: 700,
-              fontSize: '13px', letterSpacing: '0.5px', textTransform: 'uppercase',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-              transition: 'all 0.15s'
-            }}
-          >
-            Avançar <ArrowRight size={14} /> {nextCfg.label}
-          </button>
+          <>
+            {pendingWeighing && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '8px 10px', marginBottom: '8px', borderRadius: '6px',
+                background: 'rgba(183,53,39,0.08)', border: '1px solid rgba(183,53,39,0.25)',
+                fontSize: '11px', color: 'var(--brand-red)', fontWeight: 600
+              }}>
+                <Scale size={13} style={{ flexShrink: 0 }} />
+                Existem itens por peso ainda não pesados. Pese todos os itens para liberar o avanço.
+              </div>
+            )}
+            <button
+              onClick={() => onAdvance(order)}
+              disabled={pendingWeighing}
+              style={{
+                width: '100%', padding: '10px', borderRadius: '8px',
+                background: pendingWeighing ? 'rgba(199,173,112,0.15)' : `${cfg.color}15`,
+                border: pendingWeighing ? '1px solid rgba(199,173,112,0.3)' : `1px solid ${cfg.color}40`,
+                color: pendingWeighing ? 'var(--text-dim)' : cfg.color,
+                cursor: pendingWeighing ? 'not-allowed' : 'pointer',
+                fontFamily: 'var(--font-display)', fontWeight: 700,
+                fontSize: '13px', letterSpacing: '0.5px', textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                opacity: pendingWeighing ? 0.6 : 1,
+                transition: 'all 0.15s'
+              }}
+            >
+              Avançar <ArrowRight size={14} /> {nextCfg.label}
+            </button>
+          </>
         )}
       </div>
 
