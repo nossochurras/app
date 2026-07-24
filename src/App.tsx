@@ -1229,7 +1229,7 @@ function AwaitingWeighingScreen({
           filter: `id=eq.${orderId}`,
         },
         (payload) => {
-          if (payload.new.status === 'weighing_done') {
+          if (payload.new.status === 'weighing_done' || payload.new.status === 'awaiting_payment') {
             supabase
               .from('order_notifications')
               .select('*')
@@ -2344,7 +2344,7 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
     // Se for um pedido com pesagem e ainda não carregamos a notificação
     if (
       isExpanding &&
-      (order.status === 'weighing_done' || order.status === 'awaiting_weighing') &&
+      (order.status === 'weighing_done' || order.status === 'awaiting_weighing' || order.status === 'awaiting_payment') &&
       !weighingData[order.id]
     ) {
       setLoadingNotif(order.id);
@@ -2383,7 +2383,7 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
         });
         const isRetirada = order.location === 'Retirada no Balcão';
         const isAwaitingWeighing = order.status === 'awaiting_weighing';
-        const isWeighingDone = order.status === 'weighing_done';
+        const isWeighingDone = order.status === 'weighing_done' || order.status === 'awaiting_payment';
         const isExpanded = expandedOrderId === order.id;
         const notif = weighingData[order.id];
 
