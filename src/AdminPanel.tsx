@@ -1051,17 +1051,30 @@ function OrdersTab({ profile }: { profile: Profile }) {
       .limit(100)
     setOrders(data ?? [])
     setLoading(false)
+    return data ?? []
   }, [])
+
+  // Atualiza a lista E o pedido aberto no painel (selected), pois eles
+  // vivem em states separados. Sem isso, depois de pesar um item o painel
+  // fica com dados antigos até o admin fechar e reabrir o pedido.
+  const refreshOrdersAndSelected = useCallback(async () => {
+    const fresh = await fetchOrders()
+    setSelected(prevSelected => {
+      if (!prevSelected) return prevSelected
+      const updated = fresh.find((o: Order) => o.id === prevSelected.id)
+      return updated ?? prevSelected
+    })
+  }, [fetchOrders])
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
   useEffect(() => {
     const channel = supabase
       .channel('orders-list')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchOrders)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, refreshOrdersAndSelected)
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [fetchOrders])
+  }, [refreshOrdersAndSelected])
 
   const filtered = orders.filter(o => {
     const matchStatus = filterStatus === 'all' || o.status === filterStatus
@@ -1073,8 +1086,7 @@ function OrdersTab({ profile }: { profile: Profile }) {
     const next = forceStatus ?? STATUS_CONFIG[order.status]?.next
     if (!next) return
     await supabase.from('orders').update({ status: next, payment_status: next === 'preparing' && order.status === 'awaiting_payment' ? 'paid' : undefined }).eq('id', order.id)
-    fetchOrders()
-    if (selected?.id === order.id) setSelected({ ...order, status: next })
+    await refreshOrdersAndSelected()
   }
 
   return (
@@ -1118,8 +1130,7 @@ function OrdersTab({ profile }: { profile: Profile }) {
         </div>
       </div>
 
-      <OrdersGrid profile={profile} orders={filtered} selected={selected} setSelected={setSelected} advanceStatus={advanceStatus} fetchOrders={fetchOrders} />
-    </Page>
+      <OrdersGrid profile={profile} orders={filtered} selected={selected} setSelected={setSelected} advanceStatus={advanceStatus} fetchOrders={refreshOrdersAndSelected} />
   )
 }
 
@@ -1178,7 +1189,7 @@ function OrderDetail({ order, onAdvance, onClose, onRefresh, profile }: {
           <StatusBadge status={order.status} />
         </div>
 
-        {order.status === 'awaiting_payment' && profile.permissions?.manage_orders && (
+        {order.status === 'awaiting_payment' && order.location?.includes('Retirada') && profile.permissions?.manage_orders && (
           <>
             <div style={{
               display: 'flex', alignItems: 'center', gap: '6px',
