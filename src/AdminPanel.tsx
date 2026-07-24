@@ -1641,7 +1641,27 @@ function MenuItemModal({ item, isNew, onClose, onSave }: {
     setForm(f => ({ ...f, weight_options: f.weight_options?.filter((_, idx) => idx !== i) }))
   }
 
-  const handleSave = async () => {
+  const [validationError, setValidationError] = useState<string | null>(null)
+
+const handleSave = async () => {
+    setValidationError(null)
+
+    if (form.weight_mode) {
+      if (!form.weight_options || form.weight_options.length === 0) {
+        setValidationError('Ative faixas de peso: adicione ao menos 1 faixa antes de salvar.')
+        return
+      }
+      const invalid = form.weight_options.some(o =>
+        !o.label?.trim() ||
+        !o.max_grams || Number(o.max_grams) <= 0 ||
+        o.price === undefined || o.price === null || Number(o.price) <= 0
+      )
+      if (invalid) {
+        setValidationError('Preencha Label, Máx. (g) e Preço em todas as faixas de peso (valores maiores que zero).')
+        return
+      }
+    }
+
     setSaving(true)
     let imageUrl = form.image_url
 
@@ -1882,6 +1902,15 @@ function MenuItemModal({ item, isNew, onClose, onSave }: {
         </div>
 
         {/* Footer */}
+        {validationError && (
+          <div style={{
+            margin: '0 24px 12px', padding: '10px 14px',
+            background: 'rgba(183,53,39,0.12)', border: '1px solid rgba(183,53,39,0.35)',
+            borderRadius: '8px', color: 'var(--brand-red)', fontSize: '12px', fontWeight: 600
+          }}>
+            {validationError}
+          </div>
+        )}
         <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: '10px' }}>
           <button
             onClick={onClose}
@@ -1897,7 +1926,7 @@ function MenuItemModal({ item, isNew, onClose, onSave }: {
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || !form.name}
+            disabled={saving || !form.name || (form.weight_mode && (!form.weight_options || form.weight_options.length === 0))}
             style={{
               flex: 1, padding: '10px', borderRadius: '8px',
               background: saving || !form.name ? 'rgba(183,53,39,0.3)' : 'var(--brand-red)',
