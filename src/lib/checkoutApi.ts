@@ -67,6 +67,8 @@ const CREATE_ORDER_URL = env.VITE_N8N_CREATE_ORDER_URL?.trim()
 const CREATE_PAYMENT_URL = env.VITE_N8N_CREATE_PAYMENT_URL?.trim()
 const PAGBANK_PUBLIC_KEY = env.VITE_PAGBANK_PUBLIC_KEY?.trim()
 
+export const isPagBankCardConfigured = Boolean(PAGBANK_PUBLIC_KEY)
+
 function requireUrl(url: string | undefined, variable: string) {
   if (!url) {
     throw new Error(`Configuração ausente: defina ${variable} no arquivo .env.`)
@@ -92,7 +94,7 @@ async function postJson<T>(url: string, payload: unknown): Promise<T> {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
-        'X-App-Client': 'praca-nosso-churras-web/2.0.0',
+        'X-App-Client': 'praca-nosso-churras-client/2.1.0',
       },
       body: JSON.stringify(payload),
     })
@@ -245,7 +247,7 @@ export function encryptPagBankCard(input: {
   securityCode: string
 }) {
   if (!PAGBANK_PUBLIC_KEY) {
-    throw new Error('Configuração ausente: defina VITE_PAGBANK_PUBLIC_KEY no arquivo .env.')
+    throw new Error('Pagamento por cartão ainda não foi habilitado. Use PIX ou pagamento na retirada.')
   }
 
   if (!window.PagSeguro?.encryptCard) {

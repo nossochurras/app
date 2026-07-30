@@ -26,6 +26,7 @@ import {
   formatPhone,
   isValidCpf,
   isValidPhone,
+  isPagBankCardConfigured,
   onlyDigits,
   requestCheckoutQuote,
 } from '../lib/checkoutApi'
@@ -138,6 +139,7 @@ export default function PagBankCheckoutScreen({
 
   useEffect(() => {
     if (isDelivery && paymentMethod === 'LOCAL') setPaymentMethod('PIX')
+    if (!isPagBankCardConfigured && paymentMethod === 'CREDIT_CARD') setPaymentMethod('PIX')
   }, [isDelivery, paymentMethod])
 
   const loadQuote = async (coupon: string | null, couponAction = false) => {
@@ -290,7 +292,14 @@ export default function PagBankCheckoutScreen({
 
           <div className="space-y-3">
             <PaymentOption selected={paymentMethod === 'PIX'} onClick={() => setPaymentMethod('PIX')} icon={<QrCode size={22} />} title="PIX" subtitle="QR Code e copia e cola" />
-            <PaymentOption selected={paymentMethod === 'CREDIT_CARD'} onClick={() => setPaymentMethod('CREDIT_CARD')} icon={<CreditCard size={22} />} title="Cartão de crédito" subtitle="Dados criptografados pelo PagBank" />
+            <PaymentOption
+              selected={paymentMethod === 'CREDIT_CARD'}
+              onClick={() => setPaymentMethod('CREDIT_CARD')}
+              icon={<CreditCard size={22} />}
+              title="Cartão de crédito"
+              subtitle={isPagBankCardConfigured ? 'Dados criptografados pelo PagBank' : 'Disponível após cadastrar a chave pública PagBank'}
+              disabled={!isPagBankCardConfigured}
+            />
             {!isDelivery && (
               <PaymentOption selected={paymentMethod === 'LOCAL'} onClick={() => setPaymentMethod('LOCAL')} icon={<Store size={22} />} title="Pagar na retirada" subtitle="Pagamento confirmado pelo atendente" />
             )}
@@ -378,16 +387,22 @@ export default function PagBankCheckoutScreen({
   )
 }
 
-function PaymentOption({ selected, onClick, icon, title, subtitle }: { selected: boolean; onClick: () => void; icon: React.ReactNode; title: string; subtitle: string }) {
+function PaymentOption({ selected, onClick, icon, title, subtitle, disabled = false }: { selected: boolean; onClick: () => void; icon: React.ReactNode; title: string; subtitle: string; disabled?: boolean }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${selected ? 'border-brand-red bg-white shadow-lg' : 'border-brand-gold/20 bg-transparent hover:bg-white/50'}`}>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selected ? 'bg-brand-red text-white' : 'bg-brand-dark/5 text-brand-dark/60'}`}>{icon}</div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-disabled={disabled}
+      className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${disabled ? 'border-brand-gold/10 bg-brand-dark/[0.03] opacity-60 cursor-not-allowed' : selected ? 'border-brand-red bg-white shadow-lg' : 'border-brand-gold/20 bg-transparent hover:bg-white/50'}`}
+    >
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selected && !disabled ? 'bg-brand-red text-white' : 'bg-brand-dark/5 text-brand-dark/60'}`}>{icon}</div>
       <div className="flex-1 text-left">
         <div className="font-bold text-brand-dark">{title}</div>
         <div className="text-xs text-brand-dark/55 mt-1">{subtitle}</div>
       </div>
-      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selected ? 'border-brand-red' : 'border-brand-gold'}`}>
-        {selected && <div className="w-3 h-3 bg-brand-red rounded-full" />}
+      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selected && !disabled ? 'border-brand-red' : 'border-brand-gold'}`}>
+        {selected && !disabled && <div className="w-3 h-3 bg-brand-red rounded-full" />}
       </div>
     </button>
   )
