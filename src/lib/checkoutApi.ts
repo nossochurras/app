@@ -62,20 +62,9 @@ export class CheckoutApiError extends Error {
 
 const env = import.meta.env as Record<string, string | undefined>
 
-// Endpoints públicos padrão do projeto. As variáveis VITE_ continuam podendo
-// sobrescrever estes valores em outros ambientes, mas o checkout não deixa de
-// funcionar quando um arquivo .env específico não é carregado pelo Vite.
-const DEFAULT_N8N_BASE_URL = 'https://n8nwebhook.solviaoficial.com'
-
-const QUOTE_URL =
-  env.VITE_N8N_CHECKOUT_QUOTE_URL?.trim() ||
-  `${DEFAULT_N8N_BASE_URL}/webhook/pagbank/checkout-quote`
-const CREATE_ORDER_URL =
-  env.VITE_N8N_CREATE_ORDER_URL?.trim() ||
-  `${DEFAULT_N8N_BASE_URL}/webhook/pagbank/create-weighing-order`
-const CREATE_PAYMENT_URL =
-  env.VITE_N8N_CREATE_PAYMENT_URL?.trim() ||
-  `${DEFAULT_N8N_BASE_URL}/webhook/pagbank/create-payment`
+const QUOTE_URL = env.VITE_N8N_CHECKOUT_QUOTE_URL?.trim()
+const CREATE_ORDER_URL = env.VITE_N8N_CREATE_ORDER_URL?.trim()
+const CREATE_PAYMENT_URL = env.VITE_N8N_CREATE_PAYMENT_URL?.trim()
 const PAGBANK_PUBLIC_KEY = env.VITE_PAGBANK_PUBLIC_KEY?.trim()
 
 export const isPagBankCardConfigured = Boolean(PAGBANK_PUBLIC_KEY)
