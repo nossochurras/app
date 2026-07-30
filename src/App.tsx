@@ -30,6 +30,9 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import AdminPanel from './AdminPanel'
+import PagBankCheckoutScreen from './components/PagBankCheckoutScreen'
+import PaymentStatusScreen from './components/PaymentStatusScreen'
+import { createWeighingOrder, PaymentSession } from './lib/checkoutApi'
 
 // ─── FIDELITY HELPERS ───────────────────────────────────────────
 
@@ -43,45 +46,7 @@ async function ensureFidelityRecord(userId: string) {
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (data) return data;
-
-  const { data: created } = await supabase
-    .from('fidelity')
-    .insert({ user_id: userId, total_spent: 0 })
-    .select('total_spent')
-    .single();
-
-  return created;
-}
-
-async function addSpentAndCheckGoal(userId: string, amount: number) {
-  const current = await ensureFidelityRecord(userId);
-  if (!current) return { couponGenerated: false };
-
-  const newTotal = current.total_spent + amount;
-
-  if (newTotal >= FIDELITY_GOAL) {
-    const excess = newTotal - FIDELITY_GOAL;
-    const code = 'BRASA-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-
-    await supabase
-      .from('fidelity')
-      .update({ total_spent: excess, updated_at: new Date().toISOString() })
-      .eq('user_id', userId);
-
-    await supabase
-      .from('fidelity_coupons')
-      .insert({ user_id: userId, code, redeemed: false });
-
-    return { couponGenerated: true, couponCode: code };
-  }
-
-  await supabase
-    .from('fidelity')
-    .update({ total_spent: newTotal, updated_at: new Date().toISOString() })
-    .eq('user_id', userId);
-
-  return { couponGenerated: false };
+  return data ?? { total_spent: 0 };
 }
 
 async function fetchActiveCoupons(userId: string) {
@@ -264,7 +229,7 @@ const BranchTransition = ({ isVisible }: { isVisible: boolean }) => {
 export default function App() {
   const [view, setView] = useState<
     'auth' | 'register' | 'confirm-email' | 'welcome' | 'location' |
-    'menu' | 'cart' | 'checkout' | 'success' | 'profile' | 'coupons' | 'support' | 'awaiting_weighing'
+    'menu' | 'cart' | 'checkout' | 'payment_pending' | 'success' | 'profile' | 'coupons' | 'support' | 'awaiting_weighing'
   >('auth');
   const [location, setLocation] = useState<string>('');
   const [cart, setCart] = useState<{
@@ -285,6 +250,9 @@ export default function App() {
   const [weightModal, setWeightModal] = useState<DynamicMenuItem | null>(null);
   const [awaitingWeighingOrderId, setAwaitingWeighingOrderId] = useState<string | null>(null);
   const [weighedTotal, setWeighedTotal] = useState<number | null>(null);
+  const [existingCheckoutOrderId, setExistingCheckoutOrderId] = useState<string | null>(null);
+  const [paymentSession, setPaymentSession] = useState<PaymentSession | null>(null);
+  const [successMode, setSuccessMode] = useState<'paid' | 'local_pending'>('paid');
   const [profileInitialSubView, setProfileInitialSubView] = useState<'main' | 'orders' | 'coupons'>('main');
   const [inAppNotification, setInAppNotification] = useState<{ title: string; body: string; onTap: () => void } | null>(null);;
   
@@ -440,63 +408,26 @@ export default function App() {
   };
 
   const handleWeighing = async () => {
-    // Gera o código do pedido
-    let code: string;
-    if (location === 'Retirada no Balcão') {
-      code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    } else {
-      const { data: lastOrder } = await supabase
-        .from('orders')
-        .select('order_code')
-        .neq('location', 'Retirada no Balcão')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-  
-      const lastNumber = lastOrder ? parseInt(lastOrder.order_code, 10) : 0;
-      const nextNumber = (isNaN(lastNumber) ? 0 : lastNumber) + 1;
-      code = nextNumber.toString().padStart(3, '0');
-    }
-  
-    setOrderCode(code);
-  
-    if (user?.id) {
-      const { data: orderData, error } = await supabase
-        .from('orders')
-        .insert({
-          user_id: user.id,
-          location: location,
-          items: cart.map(c => ({
-            id: c.item.id,
-            name: c.item.name,
-            price: c.price,
-            quantity: c.quantity,
-            weight_mode: c.item.weight_mode,
-            chosen_label: c.weightOption?.label ?? null,
-            chosen_max_grams: c.weightOption?.max_grams ?? null,
-            weight_option_id: c.weightOption?.id ?? null,
-            unit_price: c.price,
-            final_price: null,
-            real_grams: null,
-          })),
-          total: cartTotal,
-          payment_type: 'local', // será definido após pesagem
-          order_code: code,
-          status: 'awaiting_weighing',
-        })
-        .select('id')
-        .single();
-  
-      if (error) {
-        console.error('Erro ao salvar pedido:', error.message);
-        return;
-      }
-  
-      if (orderData?.id) {
-        setAwaitingWeighingOrderId(orderData.id);
-        setCart([]);           // zera o carrinho: ícone "Pedido" some
-        setView('awaiting_weighing');
-      }
+    if (!user?.id || cart.length === 0) return;
+
+    try {
+      const response = await createWeighingOrder({
+        location,
+        items: cart.map(item => ({
+          menu_item_id: String(item.item.id),
+          quantity: item.quantity,
+          weight_option_id: item.weightOption?.id ?? null,
+        })),
+      });
+
+      setOrderCode(response.order_code);
+      setAwaitingWeighingOrderId(response.order_id);
+      setExistingCheckoutOrderId(response.order_id);
+      setCart([]);
+      setView('awaiting_weighing');
+    } catch (error) {
+      console.error('Erro ao criar pedido para pesagem:', error);
+      window.alert(error instanceof Error ? error.message : 'Não foi possível criar o pedido para pesagem.');
     }
   };
   
@@ -917,113 +848,56 @@ export default function App() {
 
         {/* CHECKOUT SCREEN */}
         {view === 'checkout' && (
-          <CheckoutScreen
+          <PagBankCheckoutScreen
+            user={user}
             location={location}
-            cartTotal={weighedTotal !== null ? weighedTotal : cartTotal}
-            deliveryFee={deliveryFee}
-            onBack={() => setView('cart')}
-            onFinalize={async (paymentType: 'app' | 'local', coupon?: any) => {
-              if (awaitingWeighingOrderId) {
-                const baseTotal = weighedTotal !== null ? weighedTotal : cartTotal;
-                const discountAmount = coupon
-                  ? coupon.type === 'fixed' ? Number(coupon.discount_value)
-                  : coupon.type === 'percent' ? Math.round((baseTotal * Number(coupon.discount_value) / 100) * 100) / 100
-                  : 0
-                  : 0;
-                const finalTotal = Math.max(baseTotal + deliveryFee - discountAmount, 0);
-              
-                await supabase.from('orders').update({
-                  payment_type: paymentType,
-                  status: 'paid',
-                  total: finalTotal,          // <-- linha nova
-                }).eq('id', awaitingWeighingOrderId);
-              
-                if (coupon) {
-                  await supabase.from('coupons').update({ used_count: coupon.used_count + 1 }).eq('id', coupon.id);
-                  await supabase.from('coupon_uses').insert({ coupon_id: coupon.id, order_id: awaitingWeighingOrderId, user_id: user?.id ?? null });
-                }
-              
-                if (user?.id) {
-                  const result = await addSpentAndCheckGoal(user.id, finalTotal);   // <-- usa finalTotal
-                  if (result.couponGenerated && result.couponCode) {
-                    setFidelityNewCoupon(result.couponCode);
-                  }
-                }
-
-                setView('success');
-                return;
-              }
-
-              let code: string;
-              if (location === 'Retirada no Balcão') {
-                code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            cart={cart}
+            existingOrderId={existingCheckoutOrderId}
+            fallbackTotal={weighedTotal !== null ? weighedTotal : cartTotal}
+            fallbackDeliveryFee={deliveryFee}
+            onBack={() => {
+              if (existingCheckoutOrderId) {
+                setProfileInitialSubView('orders');
+                setView('profile');
               } else {
-                const { data: lastOrder } = await supabase
-                  .from('orders')
-                  .select('order_code')
-                  .neq('location', 'Retirada no Balcão')
-                  .order('created_at', { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
-                const lastNumber = lastOrder ? parseInt(lastOrder.order_code, 10) : 0;
-                const nextNumber = (isNaN(lastNumber) ? 0 : lastNumber) + 1;
-                code = nextNumber.toString().padStart(3, '0');
+                setView('cart');
               }
+            }}
+            onCreated={(session) => {
+              setPaymentSession(session);
+              setOrderCode(session.orderCode);
+              setExistingCheckoutOrderId(null);
+              setAwaitingWeighingOrderId(null);
+              setWeighedTotal(null);
+              setCart([]);
 
-              setOrderCode(code);
-
-              const discountAmount = coupon
-                ? coupon.type === 'fixed' ? Number(coupon.discount_value)
-                : coupon.type === 'percent' ? Math.round((cartTotal * Number(coupon.discount_value) / 100) * 100) / 100
-                : 0
-                : 0;
-              const finalTotal = Math.max(cartTotal + deliveryFee - discountAmount, 0);
-
-              if (user?.id) {
-                const { data: insertedOrder, error } = await supabase   // <-- captura data
-                  .from('orders')
-                  .insert({
-                    user_id: user.id,
-                    location: location,
-                    items: cart.map(c => ({
-                      id: c.item.id,
-                      name: c.item.name,
-                      price: c.price,
-                      quantity: c.quantity,
-                      weight_mode: c.item.weight_mode,
-                      chosen_label: c.weightOption?.label ?? null,
-                      chosen_max_grams: c.weightOption?.max_grams ?? null,
-                      weight_option_id: c.weightOption?.id ?? null,
-                      unit_price: c.price,
-                      final_price: null,
-                      real_grams: null,
-                    })),
-                    total: finalTotal,
-                    delivery_fee: deliveryFee,
-                    payment_type: paymentType,
-                    order_code: code,
-                    status: 'pending',
-                  })
-                  .select('id')
-                  .single();
-
-                if (error) {
-                  console.error('Erro ao salvar pedido:', error.message);
-                  return;
-                }
-
-                if (coupon) {
-                  await supabase.from('coupons').update({ used_count: coupon.used_count + 1 }).eq('id', coupon.id);
-                  await supabase.from('coupon_uses').insert({ coupon_id: coupon.id, order_id: insertedOrder?.id ?? null, user_id: user?.id ?? null });
-                }
-
-                const result = await addSpentAndCheckGoal(user.id, finalTotal);
-                if (result.couponGenerated && result.couponCode) {
-                  setFidelityNewCoupon(result.couponCode);
-                }
+              if (session.method === 'LOCAL') {
+                setSuccessMode('local_pending');
+                setView('success');
+              } else {
+                setView('payment_pending');
               }
+            }}
+          />
+        )}
 
+        {/* PAYMENT STATUS SCREEN */}
+        {view === 'payment_pending' && paymentSession && (
+          <PaymentStatusScreen
+            session={paymentSession}
+            onPaid={(couponCode) => {
+              setSuccessMode('paid');
+              setFidelityNewCoupon(couponCode ?? null);
               setView('success');
+            }}
+            onRetry={() => {
+              setExistingCheckoutOrderId(paymentSession.orderId);
+              setWeighedTotal(paymentSession.totalCents / 100);
+              setView('checkout');
+            }}
+            onOrders={() => {
+              setProfileInitialSubView('orders');
+              setView('profile');
             }}
           />
         )}
@@ -1040,8 +914,10 @@ export default function App() {
             onCoupons={() => setView('coupons')}
             onProfile={() => { setProfileInitialSubView('main'); setView('profile'); }}
             onSupport={() => setView('support')}
-            onGoToCheckout={(orderId: string, finalPrice: number) => {
+            onGoToCheckout={(orderId: string, finalPrice: number, orderLocation?: string) => {
               setAwaitingWeighingOrderId(orderId);
+              setExistingCheckoutOrderId(orderId);
+              if (orderLocation) setLocation(orderLocation);
               setWeighedTotal(finalPrice);
               setView('checkout');
             }}
@@ -1071,6 +947,7 @@ export default function App() {
             orderCode={orderCode}
             location={location}
             onConfirmed={async (finalPrice: number) => {
+              setExistingCheckoutOrderId(awaitingWeighingOrderId);
               setWeighedTotal(finalPrice);
               setView('checkout');
             }}
@@ -1109,12 +986,13 @@ export default function App() {
             >
               <ChefHat size={80} className="text-brand-gold mb-6 mx-auto" />
             </motion.div>
-            <h1 className="font-display text-5xl mb-4">Pedido na Brasa!</h1>
+            <h1 className="font-display text-5xl mb-4">{successMode === 'paid' ? 'Pagamento Confirmado!' : 'Pedido Recebido!'}</h1>
             <p className="text-brand-cream/90 text-lg mb-8 max-w-sm">
-              Tudo anotado para o seu momento.{' '}
-              {location === 'Retirada no Balcão'
-                ? 'Apresente o código abaixo no balcão para retirar.'
-                : 'Aproveite a resenha enquanto levamos seu churrasco.'}
+              {successMode === 'local_pending'
+                ? 'Seu pedido foi registrado. O preparo será liberado quando o atendente confirmar o pagamento na retirada.'
+                : location === 'Retirada no Balcão'
+                  ? 'Pagamento confirmado. Apresente o código abaixo no balcão para retirar.'
+                  : 'Pagamento confirmado. Aproveite a resenha enquanto levamos seu churrasco.'}
             </p>
         
             <div className="bg-brand-dark w-full max-w-sm p-8 rounded-3xl mb-6 shadow-2xl relative overflow-hidden">
@@ -1156,6 +1034,9 @@ export default function App() {
                 setOrderCode('');
                 setFidelityNewCoupon(null);
                 setAwaitingWeighingOrderId(null);
+                setExistingCheckoutOrderId(null);
+                setPaymentSession(null);
+                setSuccessMode('paid');
                 setWeighedTotal(null);
                 setView('welcome');
               }}
@@ -1680,211 +1561,6 @@ function CartScreen({ cart, location, cartTotal, onBack, onAdd, onRemove, onChec
   );
 }
 
-function CheckoutScreen({ location, cartTotal, deliveryFee = 0, onBack, onFinalize }: any) {
-  const [paymentType, setPaymentType] = useState<'app' | 'local'>('app');
-  const [couponCode, setCouponCode] = useState('');
-  const [coupon, setCoupon] = useState<any>(null);
-  const [couponError, setCouponError] = useState('');
-  const [couponLoading, setCouponLoading] = useState(false);
-
-  const isDelivery = isDeliveryLocation(location);
-
-  useEffect(() => {
-    if (isDelivery && paymentType === 'local') {
-      setPaymentType('app');
-    }
-  }, [isDelivery, paymentType]);
-
-  const discount = coupon
-    ? coupon.type === 'fixed' ? Number(coupon.discount_value)
-    : coupon.type === 'percent' ? Math.round((cartTotal * Number(coupon.discount_value) / 100) * 100) / 100
-    : 0
-    : 0;
-
-  const finalTotal = Math.max(cartTotal + deliveryFee - discount, 0);
-
-  const handleApplyCoupon = async () => {
-    setCouponError('');
-    setCoupon(null);
-    setCouponLoading(true);
-    const upper = couponCode.toUpperCase().trim();
-
-    const { data } = await supabase
-      .from('coupons')
-      .select('*')
-      .eq('code', upper)
-      .maybeSingle();
-
-    if (!data) {
-      setCouponError('Cupom não encontrado.');
-      setCouponLoading(false);
-      return;
-    }
-    if (!data.active) {
-      setCouponError('Este cupom está inativo.');
-      setCouponLoading(false);
-      return;
-    }
-    if (data.expires_at && new Date(data.expires_at) < new Date()) {
-      setCouponError('Este cupom expirou.');
-      setCouponLoading(false);
-      return;
-    }
-    if (data.used_count >= data.max_uses) {
-      setCouponError('Este cupom já atingiu o limite de usos.');
-      setCouponLoading(false);
-      return;
-    }
-
-    setCoupon(data);
-    setCouponLoading(false);
-  };
-
-  return (
-    <motion.div
-      key="checkout"
-      variants={pageVariants}
-      initial={{ opacity: 0, x: 100 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 100 }}
-      className="min-h-screen bg-brand-cream pb-40 flex flex-col"
-    >
-      <div className="sticky top-0 z-40 bg-brand-cream/90 backdrop-blur-md px-6 py-4 flex items-center justify-between shadow-sm">
-        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-brand-gold/20 transition">
-          <ArrowLeft size={28} className="text-brand-dark" />
-        </button>
-        <h2 className="font-display text-2xl absolute left-1/2 -translate-x-1/2">Pagamento</h2>
-      </div>
-
-      <div className="p-6 flex-1 flex flex-col gap-6">
-        <div>
-          <h3 className="text-xl font-bold text-brand-dark mb-4">Escolha a forma de pagamento</h3>
-          <p className="text-sm text-brand-dark/70 mb-6 border-b border-brand-gold/20 pb-4">
-            {isDelivery
-              ? 'Para pedidos entregues na churrasqueira, o pagamento é feito agora pelo App com Cartão ou PIX.'
-              : 'Você pode pagar agora pelo App com Cartão/PIX, ou pagar no momento da retirada.'}
-            {deliveryFee > 0 && ' Sua taxa para levar o churrasco até a churrasqueira já está incluída no total abaixo.'}
-          </p>
-
-
-          <div className="space-y-4">
-            <button
-              onClick={() => setPaymentType('app')}
-              className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${paymentType === 'app' ? 'border-brand-red bg-white shadow-lg' : 'border-brand-gold/20 bg-transparent hover:bg-white/50'}`}
-            >
-              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${paymentType === 'app' ? 'border-brand-red' : 'border-brand-gold'}`}>
-                {paymentType === 'app' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full" />}
-              </div>
-              <div className="flex-1 text-left">
-                <div className="font-bold text-brand-dark">Pagar pelo App</div>
-                <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
-                  <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
-                  <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">PIX</span>
-                </div>
-              </div>
-            </button>
-
-            {!isDelivery && (
-              <button
-                onClick={() => setPaymentType('local')}
-                className={`w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${paymentType === 'local' ? 'border-brand-red bg-white shadow-lg' : 'border-brand-gold/20 bg-transparent hover:bg-white/50'}`}
-              >
-                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${paymentType === 'local' ? 'border-brand-red' : 'border-brand-gold'}`}>
-                  {paymentType === 'local' && <motion.div layoutId="pay-dot" className="w-3 h-3 bg-brand-red rounded-full" />}
-                </div>
-                <div className="flex-1 text-left">
-                  <div className="font-bold text-brand-dark">Pagar na Retirada</div>
-                  <div className="text-xs text-brand-dark/60 mt-1 flex gap-2">
-                    <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Cartão</span>
-                    <span className="bg-brand-dark/5 px-2 py-0.5 rounded-sm">Benefício</span>
-                  </div>
-                </div>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* CUPOM */}
-        <div className="bg-white border border-brand-gold/20 rounded-2xl p-5">
-          <div className="text-xs font-bold text-brand-dark/50 uppercase tracking-wider mb-3">Tem um cupom?</div>
-          {coupon ? (
-            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl p-3">
-              <div>
-                <div className="font-bold text-green-700 text-sm">{coupon.code}</div>
-                <div className="text-xs text-green-600 mt-0.5">
-                  {coupon.type === 'fixed' && `- R$ ${Number(coupon.discount_value).toFixed(2).replace('.', ',')}`}
-                  {coupon.type === 'percent' && `- ${coupon.discount_value}%`}
-                  {coupon.type === 'free_item' && `Item grátis: ${coupon.free_item_description}`}
-                </div>
-              </div>
-              <button onClick={() => { setCoupon(null); setCouponCode(''); }} className="text-red-400 text-xs font-bold">Remover</button>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <input
-                value={couponCode}
-                onChange={e => setCouponCode(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
-                placeholder="CÓDIGO DO CUPOM"
-                className="flex-1 bg-brand-cream border border-brand-gold/30 rounded-xl px-4 py-2.5 text-sm font-bold tracking-widest text-brand-dark placeholder:text-brand-dark/30 focus:outline-none focus:border-brand-red uppercase"
-              />
-              <button
-                onClick={handleApplyCoupon}
-                disabled={!couponCode || couponLoading}
-                className="px-4 py-2.5 bg-brand-dark text-brand-gold rounded-xl text-sm font-bold disabled:opacity-40 transition"
-              >
-                {couponLoading ? '...' : 'Aplicar'}
-              </button>
-            </div>
-          )}
-          {couponError && <p className="text-red-500 text-xs mt-2 font-medium">{couponError}</p>}
-        </div>
-
-        {/* TOTAL */}
-        <div className="bg-brand-dark text-brand-cream p-6 rounded-3xl shadow-xl">
-          <div className="text-brand-gold text-xs font-bold uppercase tracking-widest mb-3">Resumo</div>
-          <div className="flex justify-between items-center mb-2 text-brand-cream/60 text-sm">
-            <span>Subtotal</span>
-            <span>R$ {cartTotal.toFixed(2).replace('.', ',')}</span>
-          </div>
-          {deliveryFee > 0 && (
-            <div className="flex justify-between items-center mb-2 text-brand-cream/60 text-sm">
-              <span>Taxa para levar até sua brasa</span>
-              <span>R$ {deliveryFee.toFixed(2).replace('.', ',')}</span>
-            </div>
-          )}
-          {discount > 0 && (
-            <div className="flex justify-between items-center mb-2 text-green-400 text-sm">
-              <span>Desconto ({coupon.code})</span>
-              <span>- R$ {discount.toFixed(2).replace('.', ',')}</span>
-            </div>
-          )}
-          {coupon?.type === 'free_item' && (
-            <div className="flex justify-between items-center mb-2 text-green-400 text-sm">
-              <span>Item grátis</span>
-              <span>{coupon.free_item_description}</span>
-            </div>
-          )}
-          <div className="flex justify-between items-center text-2xl font-display pt-3 border-t border-white/10 mt-2">
-            <span>Total</span>
-            <span className="text-brand-red">R$ {finalTotal.toFixed(2).replace('.', ',')}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-brand-cream via-brand-cream to-transparent z-50">
-        <div className="max-w-md mx-auto">
-          <button
-            onClick={() => onFinalize(paymentType, coupon)}
-            className="w-full bg-brand-red text-white p-5 rounded-2xl flex items-center justify-center gap-3 font-bold text-xl shadow-2xl hover:bg-red-700 transition hover:-translate-y-1 font-display tracking-widest uppercase"
-          >
-            Finalizar Pedido
-          </button>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
 function BottomNav({ activeTab, cartCount, onNavigate }: { activeTab: string, cartCount: number, onNavigate: (tab: string) => void }) {
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-brand-gold/20 flex justify-between items-center pt-3 pb-safe-bottom z-[60] shadow-[0_-10px_30px_rgba(0,0,0,0.05)] text-brand-dark max-w-md mx-auto px-4">
@@ -2294,7 +1970,7 @@ function FidelitySubView({ userId }: { userId?: string }) {
   );
 }
 
-function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToCheckout?: (orderId: string, finalPrice: number) => void }) {
+function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToCheckout?: (orderId: string, finalPrice: number, location?: string) => void }) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
@@ -2391,6 +2067,7 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
           order.status === 'pending' ? 'Em andamento' :
           order.status === 'awaiting_weighing' ? 'Aguard. Pesagem' :
           order.status === 'weighing_done' ? 'Pesagem OK' :
+          order.status === 'awaiting_payment' ? 'Aguard. Pagamento' :
           order.status === 'preparing' ? 'Preparando' :
           order.status === 'ready' ? 'Pronto!' :
           order.status === 'delivered' ? 'Entregue' :
@@ -2438,7 +2115,7 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
               <div className="border-t border-brand-gold/10 pt-3 mt-3 flex justify-between items-center">
                 <span className="text-xs text-brand-dark/50">
                   {(order.items as any[]).length} {(order.items as any[]).length === 1 ? 'item' : 'itens'} •{' '}
-                  {order.payment_type === 'app' ? 'Pago pelo App' : 'Pagar no Local'}
+                  {order.payment_method === 'PIX' ? 'PIX' : order.payment_method === 'CREDIT_CARD' ? 'Cartão PagBank' : order.payment_method === 'LOCAL' || order.payment_type === 'local' ? 'Pagar no local' : 'Pagamento online'}
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="font-display text-brand-red text-lg">
@@ -2525,7 +2202,7 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
                             </div>
                             {isWeighingDone && onGoToCheckout && (
                               <button
-                                onClick={() => onGoToCheckout(order.id, Number(notif.order_total ?? notif.final_price))}
+                                onClick={() => onGoToCheckout(order.id, Number(notif.order_total ?? notif.final_price), order.location)}
                                 className="w-full bg-brand-red text-white py-3 rounded-xl font-bold text-sm tracking-wide hover:bg-red-700 transition active:scale-[0.98] shadow-md"
                               >
                                 Ir para Pagamento →
@@ -2534,6 +2211,15 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
                           </>
                         ) : null}
                       </div>
+                    )}
+
+                    {order.status === 'awaiting_payment' && order.payment_method !== 'LOCAL' && order.payment_type !== 'local' && !notif && onGoToCheckout && (
+                      <button
+                        onClick={() => onGoToCheckout(order.id, Number(order.total), order.location)}
+                        className="w-full bg-brand-red text-white py-3 rounded-xl font-bold text-sm tracking-wide hover:bg-red-700 transition active:scale-[0.98] shadow-md"
+                      >
+                        Continuar pagamento →
+                      </button>
                     )}
 
                   </div>

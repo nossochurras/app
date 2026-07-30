@@ -23,3 +23,20 @@ body {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
+
+.checkout-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-brand-gold) 35%, transparent);
+  background: var(--color-brand-cream);
+  padding: 0.8rem 0.95rem;
+  font-size: 0.875rem;
+  color: var(--color-brand-dark);
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.checkout-input:focus {
+  border-color: var(--color-brand-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-red) 14%, transparent);
+}

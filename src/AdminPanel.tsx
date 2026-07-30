@@ -173,6 +173,8 @@ type Order = {
   status: string
   payment_type: string
   payment_status: string
+  payment_method?: string
+  pagbank_order_id?: string | null
   total: number
   created_at: string
   user_id: string
@@ -928,7 +930,7 @@ function OrdersGrid({ profile, orders, selected, setSelected, advanceStatus, fet
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
                     {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} •{' '}
-                    {order.payment_type === 'app' ? 'Pago no App' : 'Pagamento Local'}
+                    {order.payment_method === 'PIX' ? 'PIX' : order.payment_method === 'CREDIT_CARD' ? 'Cartão PagBank' : order.payment_method === 'LOCAL' || order.payment_type === 'local' ? 'Pagamento Local' : 'Pagamento no App'}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -1083,9 +1085,17 @@ function OrdersTab({ profile }: { profile: Profile }) {
   })
 
   const advanceStatus = async (order: Order, forceStatus?: string) => {
+    if (forceStatus === 'confirm_local_payment') {
+      const { error } = await supabase.rpc('confirm_local_payment', { p_order_id: order.id })
+      if (error) window.alert(error.message)
+      await refreshOrdersAndSelected()
+      return
+    }
+
     const next = forceStatus ?? STATUS_CONFIG[order.status]?.next
     if (!next) return
-    await supabase.from('orders').update({ status: next, payment_status: next === 'preparing' && order.status === 'awaiting_payment' ? 'paid' : undefined }).eq('id', order.id)
+    const { error } = await supabase.from('orders').update({ status: next }).eq('id', order.id)
+    if (error) window.alert(error.message)
     await refreshOrdersAndSelected()
   }
 
@@ -1190,7 +1200,7 @@ function OrderDetail({ order, onAdvance, onClose, onRefresh, profile }: {
           <StatusBadge status={order.status} />
         </div>
 
-        {order.status === 'awaiting_payment' && order.location?.includes('Retirada') && profile.permissions?.manage_orders && (
+        {order.status === 'awaiting_payment' && (order.payment_method === 'LOCAL' || order.payment_type === 'local') && profile.permissions?.manage_orders && (
           <>
             <div style={{
               display: 'flex', alignItems: 'center', gap: '6px',
@@ -1202,7 +1212,7 @@ function OrderDetail({ order, onAdvance, onClose, onRefresh, profile }: {
               Confirme o pagamento para liberar o preparo do pedido.
             </div>
             <button
-              onClick={() => onAdvance(order, 'preparing')}
+              onClick={() => onAdvance(order, 'confirm_local_payment')}
               style={{
                 width: '100%', padding: '10px', borderRadius: '8px',
                 background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)',
@@ -1365,7 +1375,7 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
           : Number(i.unit_price ?? i.price ?? 0)
         return s + (itemPrice * (i.quantity ?? 1))
       }, 0)
-    const newTotal = Math.round((otherItemsTotal + finalPrice) * 100) / 100
+    const newTotal = Math.round((otherItemsTotal + (finalPrice * (item.quantity ?? 1))) * 100) / 100
 
     const updatedItems = allItems.map((i: any) => 
       (i.name === item.name && i.chosen_label === item.chosen_label)
@@ -1376,7 +1386,9 @@ function WeighingForm({ orderId, item, onDone }: { orderId: string; item: any; o
     const newStatus = allWeighed ? 'awaiting_payment' : 'awaiting_weighing'
     
     await supabase.from('orders').update({ 
-      total: newTotal, 
+      total: newTotal,
+      subtotal_cents: Math.round(newTotal * 100),
+      total_cents: Math.round(newTotal * 100),
       status: newStatus,
       items: updatedItems
     }).eq('id', orderId)
