@@ -60,8 +60,42 @@ async function fetchActiveCoupons(userId: string) {
   return data ?? [];
 }
 
-// ─── TYPES ───────────────────────────────────────────────────────
+// Status de pagamento que já estão "fechados" (não faz sentido reabrir o PIX antigo).
+const CLOSED_PAYMENT_STATUSES = ['paid', 'declined', 'canceled', 'cancelled', 'expired', 'failed', 'refunded'];
 
+// Busca no Supabase se o pedido já tem uma sessão de pagamento pendente (PIX já gerado).
+// Se existir, monta a PaymentSession a partir dos dados salvos, evitando gerar um PIX novo.
+async function fetchPendingPaymentSession(orderId: string): Promise<PaymentSession | null> {
+  const { data: order, error } = await supabase
+    .from('orders')
+    .select('id, order_code, status, payment_status, payment_method, total_cents, total, pix_copy_paste, pix_qr_image_url, pix_expires_at')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  if (error || !order) return null;
+
+  const paymentStatus = (order.payment_status || '').toLowerCase();
+  const hasPix = order.payment_method === 'PIX' && !!order.pix_copy_paste;
+
+  if (!hasPix || CLOSED_PAYMENT_STATUSES.includes(paymentStatus)) {
+    return null;
+  }
+
+  return {
+    orderId: order.id,
+    orderCode: order.order_code,
+    method: (order.payment_method || 'PIX') as PaymentSession['method'],
+    paymentStatus: order.payment_status || 'waiting',
+    orderStatus: order.status || 'awaiting_payment',
+    totalCents: Number(order.total_cents ?? Math.round(Number(order.total) * 100)),
+    pixCopyPaste: order.pix_copy_paste ?? null,
+    pixQrImageUrl: order.pix_qr_image_url ?? null,
+    pixExpiresAt: order.pix_expires_at ?? null,
+    message: null,
+  };
+}
+
+// ─── TYPES ───────────────────────────────────────────────────────
 type WeightOption = {
   id: string
   label: string
@@ -914,11 +948,22 @@ export default function App() {
             onCoupons={() => setView('coupons')}
             onProfile={() => { setProfileInitialSubView('main'); setView('profile'); }}
             onSupport={() => setView('support')}
-            onGoToCheckout={(orderId: string, finalPrice: number, orderLocation?: string) => {
-              setAwaitingWeighingOrderId(orderId);
-              setExistingCheckoutOrderId(orderId);
+            onGoToCheckout={async (orderId: string, finalPrice: number, orderLocation?: string) => {
               if (orderLocation) setLocation(orderLocation);
               setWeighedTotal(finalPrice);
+
+              const pendingSession = await fetchPendingPaymentSession(orderId);
+              if (pendingSession) {
+                // Já existe PIX/cartão pendente: reabre a tela de status, sem gerar pagamento novo.
+                setPaymentSession(pendingSession);
+                setOrderCode(pendingSession.orderCode);
+                setView('payment_pending');
+                return;
+              }
+
+              // Sem pagamento pendente salvo: segue para o formulário de checkout normalmente.
+              setAwaitingWeighingOrderId(orderId);
+              setExistingCheckoutOrderId(orderId);
               setView('checkout');
             }}
           />
