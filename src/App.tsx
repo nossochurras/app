@@ -33,6 +33,13 @@ import AdminPanel from './AdminPanel'
 import PagBankCheckoutScreen from './components/PagBankCheckoutScreen'
 import PaymentStatusScreen from './components/PaymentStatusScreen'
 import { createWeighingOrder, PaymentSession } from './lib/checkoutApi'
+import {
+  buildPaymentSessionFromOrder,
+  getOrderPaymentMethod,
+  readStoredPaymentSession,
+  removeStoredPaymentSession,
+  storePaymentSession,
+} from './lib/orderPayment'
 
 // ─── FIDELITY HELPERS ───────────────────────────────────────────
 
@@ -85,6 +92,17 @@ const LOCATIONS = Array.from({ length: 10 }, (_, i) => `Churrasqueira ${i + 1}`)
 
 function isDeliveryLocation(location: string) {
   return location !== '' && location !== 'Retirada no Balcão';
+}
+
+function orderHasWeightItems(order: any) {
+  return Array.isArray(order?.items) && order.items.some((item: any) =>
+    Boolean(
+      item?.weight_option_id ||
+      item?.chosen_label ||
+      item?.real_grams ||
+      item?.weight_mode
+    )
+  );
 }
 
 const GoogleIcon = () => (
@@ -864,6 +882,7 @@ export default function App() {
               }
             }}
             onCreated={(session) => {
+              storePaymentSession(session);
               setPaymentSession(session);
               setOrderCode(session.orderCode);
               setExistingCheckoutOrderId(null);
@@ -886,6 +905,7 @@ export default function App() {
           <PaymentStatusScreen
             session={paymentSession}
             onPaid={(couponCode) => {
+              removeStoredPaymentSession(paymentSession.orderId);
               setSuccessMode('paid');
               setFidelityNewCoupon(couponCode ?? null);
               setView('success');
@@ -920,6 +940,31 @@ export default function App() {
               if (orderLocation) setLocation(orderLocation);
               setWeighedTotal(finalPrice);
               setView('checkout');
+            }}
+            onOpenPendingPayment={(order: any) => {
+              const session =
+                (paymentSession?.orderId === String(order.id) ? paymentSession : null) ??
+                readStoredPaymentSession(String(order.id)) ??
+                buildPaymentSessionFromOrder(order);
+
+              if (!session) {
+                // Sem método ou cobrança criada: este é o primeiro acesso ao pagamento.
+                setAwaitingWeighingOrderId(String(order.id));
+                setExistingCheckoutOrderId(String(order.id));
+                if (order.location) setLocation(order.location);
+                setWeighedTotal(Number(order.total) || 0);
+                setView('checkout');
+                return;
+              }
+
+              storePaymentSession(session);
+              setPaymentSession(session);
+              setOrderCode(session.orderCode);
+              setExistingCheckoutOrderId(null);
+              setAwaitingWeighingOrderId(null);
+              setWeighedTotal(session.totalCents / 100);
+              if (order.location) setLocation(order.location);
+              setView('payment_pending');
             }}
           />
         )}
@@ -1593,7 +1638,7 @@ function BottomNav({ activeTab, cartCount, onNavigate }: { activeTab: string, ca
   );
 }
 
-function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCart, onHome, onCoupons, onProfile, onSupport, onGoToCheckout }: any) {
+function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCart, onHome, onCoupons, onProfile, onSupport, onGoToCheckout, onOpenPendingPayment }: any) {
   const [subView, setSubView] = useState<'main' | 'orders' | 'coupons' | 'payments' | 'fidelity'>(initialSubView);
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário';
   const initials = displayName.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase();
@@ -1620,7 +1665,13 @@ function ProfileScreen({ user, cartCount, initialSubView = 'main', onBack, onCar
           </h2>
         </div>
         
-       {subView === 'orders' && <OrdersSubView userId={user?.id} onGoToCheckout={onGoToCheckout} />}
+       {subView === 'orders' && (
+          <OrdersSubView
+            userId={user?.id}
+            onGoToCheckout={onGoToCheckout}
+            onOpenPendingPayment={onOpenPendingPayment}
+          />
+        )}
         {subView === 'coupons' && <CouponsSubView userId={user?.id} />}
         {subView === 'payments' && (
            <div className="space-y-4">
@@ -1970,7 +2021,15 @@ function FidelitySubView({ userId }: { userId?: string }) {
   );
 }
 
-function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToCheckout?: (orderId: string, finalPrice: number, location?: string) => void }) {
+function OrdersSubView({
+  userId,
+  onGoToCheckout,
+  onOpenPendingPayment,
+}: {
+  userId?: string
+  onGoToCheckout?: (orderId: string, finalPrice: number, location?: string) => void
+  onOpenPendingPayment?: (order: any) => void
+}) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
@@ -1990,7 +2049,7 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
       });
   }, [userId]);
 
-  // Escuta atualizações em tempo real nos pedidos do usuário
+  // Escuta atualizações em tempo real nos pedidos do usuário.
   useEffect(() => {
     if (!userId) return;
     const channel = supabase
@@ -2017,12 +2076,12 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
     const isExpanding = expandedOrderId !== order.id;
     setExpandedOrderId(isExpanding ? order.id : null);
 
-    // Se for um pedido com pesagem e ainda não carregamos a notificação
-    if (
-      isExpanding &&
-      (order.status === 'weighing_done' || order.status === 'awaiting_weighing' || order.status === 'awaiting_payment') &&
-      !weighingData[order.id]
-    ) {
+    const shouldLoadWeightData =
+      order.status === 'awaiting_weighing' ||
+      order.status === 'weighing_done' ||
+      orderHasWeightItems(order);
+
+    if (isExpanding && shouldLoadWeightData && !weighingData[order.id]) {
       setLoadingNotif(order.id);
       const { data } = await supabase
         .from('order_notifications')
@@ -2032,6 +2091,7 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+
       if (data) {
         setWeighingData(prev => ({ ...prev, [order.id]: data }));
       }
@@ -2059,11 +2119,32 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
         });
         const isRetirada = order.location === 'Retirada no Balcão';
         const isAwaitingWeighing = order.status === 'awaiting_weighing';
-        const isWeighingDone = order.status === 'weighing_done' || order.status === 'awaiting_payment';
+        const isAwaitingPayment = order.status === 'awaiting_payment';
         const isExpanded = expandedOrderId === order.id;
         const notif = weighingData[order.id];
+        const storedSession = readStoredPaymentSession(String(order.id));
+        const pendingSession = storedSession ?? buildPaymentSessionFromOrder(order);
+        const paymentMethod = getOrderPaymentMethod(order) ?? pendingSession?.method ?? null;
+        const hasWeightItems = orderHasWeightItems(order);
+        const isWeighingComplete = order.status === 'weighing_done' || Boolean(notif);
+        const showWeighingBlock =
+          isAwaitingWeighing ||
+          order.status === 'weighing_done' ||
+          Boolean(notif) ||
+          (loadingNotif === order.id && hasWeightItems);
+        const canTrackPayment = isAwaitingPayment && Boolean(pendingSession);
+        const canStartPayment =
+          (order.status === 'weighing_done' || isAwaitingPayment) &&
+          !pendingSession;
+        const finalTotal = Number(notif?.order_total ?? order.total ?? notif?.final_price ?? 0);
 
-        const statusLabel = 
+        const paymentLabel =
+          paymentMethod === 'PIX' ? 'PIX' :
+          paymentMethod === 'CREDIT_CARD' ? 'Cartão PagBank' :
+          paymentMethod === 'LOCAL' ? 'Pagar no local' :
+          'Pagamento não selecionado';
+
+        const statusLabel =
           order.status === 'pending' ? 'Em andamento' :
           order.status === 'awaiting_weighing' ? 'Aguard. Pesagem' :
           order.status === 'weighing_done' ? 'Pesagem OK' :
@@ -2076,9 +2157,18 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
 
         const statusClass =
           isAwaitingWeighing ? 'bg-brand-red/10 text-brand-red' :
-          isWeighingDone ? 'bg-yellow-100 text-yellow-700' :
+          order.status === 'weighing_done' || isAwaitingPayment ? 'bg-yellow-100 text-yellow-700' :
           order.status === 'delivered' || order.status === 'paid' ? 'bg-green-100 text-green-700' :
           'bg-yellow-100 text-yellow-700';
+
+        const handleOrderClick = () => {
+          // Uma cobrança já criada deve voltar ao acompanhamento, nunca ao checkout.
+          if (canTrackPayment && onOpenPendingPayment) {
+            onOpenPendingPayment(order);
+            return;
+          }
+          handleExpandOrder(order);
+        };
 
         return (
           <motion.div
@@ -2086,9 +2176,8 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
             layout
             className="bg-white rounded-2xl shadow-sm border border-brand-gold/20 overflow-hidden"
           >
-            {/* Cabeçalho clicável */}
             <button
-              onClick={() => handleExpandOrder(order)}
+              onClick={handleOrderClick}
               className="w-full p-5 text-left"
             >
               <div className="flex items-start justify-between mb-3">
@@ -2114,8 +2203,7 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
               </div>
               <div className="border-t border-brand-gold/10 pt-3 mt-3 flex justify-between items-center">
                 <span className="text-xs text-brand-dark/50">
-                  {(order.items as any[]).length} {(order.items as any[]).length === 1 ? 'item' : 'itens'} •{' '}
-                  {order.payment_method === 'PIX' ? 'PIX' : order.payment_method === 'CREDIT_CARD' ? 'Cartão PagBank' : order.payment_method === 'LOCAL' || order.payment_type === 'local' ? 'Pagar no local' : 'Pagamento online'}
+                  {(order.items as any[]).length} {(order.items as any[]).length === 1 ? 'item' : 'itens'} • {paymentLabel}
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="font-display text-brand-red text-lg">
@@ -2123,13 +2211,12 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
                   </span>
                   <ChevronRight
                     size={16}
-                    className={`text-brand-dark/30 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                    className={`text-brand-dark/30 transition-transform duration-200 ${isExpanded && !canTrackPayment ? 'rotate-90' : ''}`}
                   />
                 </div>
               </div>
             </button>
 
-            {/* Painel expandido — detalhes e ação de pesagem */}
             <AnimatePresence>
               {isExpanded && (
                 <motion.div
@@ -2140,8 +2227,6 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
                   className="overflow-hidden"
                 >
                   <div className="px-5 pb-5 border-t border-brand-gold/10 pt-4 space-y-3">
-
-                    {/* Itens do pedido */}
                     <div className="space-y-2">
                       {(order.items as any[]).map((item: any, i: number) => (
                         <div key={i} className="flex justify-between items-start text-sm">
@@ -2159,9 +2244,8 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
                       ))}
                     </div>
 
-                    {/* Bloco de pesagem — só aparece se há itens por peso */}
-                    {(isAwaitingWeighing || isWeighingDone) && (
-                      <div className={`rounded-2xl p-4 ${isWeighingDone ? 'bg-green-50 border border-green-200' : 'bg-brand-red/5 border border-brand-red/20'}`}>
+                    {showWeighingBlock && (
+                      <div className={`rounded-2xl p-4 ${isWeighingComplete ? 'bg-green-50 border border-green-200' : 'bg-brand-red/5 border border-brand-red/20'}`}>
                         {loadingNotif === order.id ? (
                           <p className="text-xs text-brand-dark/50 text-center py-2">Carregando dados da pesagem...</p>
                         ) : isAwaitingWeighing && !notif ? (
@@ -2182,7 +2266,7 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
                                 className="w-full rounded-xl object-cover max-h-40 mb-3"
                               />
                             )}
-                            <div className="space-y-1.5 mb-4">
+                            <div className="space-y-1.5">
                               <div className="flex justify-between text-sm">
                                 <span className="text-brand-dark/60">Peso real</span>
                                 <span className="font-bold text-brand-dark">{notif.real_grams}g</span>
@@ -2200,28 +2284,28 @@ function OrdersSubView({ userId, onGoToCheckout }: { userId?: string; onGoToChec
                                 </span>
                               </div>
                             </div>
-                            {isWeighingDone && onGoToCheckout && (
-                              <button
-                                onClick={() => onGoToCheckout(order.id, Number(notif.order_total ?? notif.final_price), order.location)}
-                                className="w-full bg-brand-red text-white py-3 rounded-xl font-bold text-sm tracking-wide hover:bg-red-700 transition active:scale-[0.98] shadow-md"
-                              >
-                                Ir para Pagamento →
-                              </button>
-                            )}
                           </>
                         ) : null}
                       </div>
                     )}
 
-                    {order.status === 'awaiting_payment' && order.payment_method !== 'LOCAL' && order.payment_type !== 'local' && !notif && onGoToCheckout && (
+                    {canStartPayment && onGoToCheckout && (
                       <button
-                        onClick={() => onGoToCheckout(order.id, Number(order.total), order.location)}
+                        onClick={() => onGoToCheckout(String(order.id), finalTotal, order.location)}
                         className="w-full bg-brand-red text-white py-3 rounded-xl font-bold text-sm tracking-wide hover:bg-red-700 transition active:scale-[0.98] shadow-md"
                       >
-                        Continuar pagamento →
+                        Ir para pagamento →
                       </button>
                     )}
 
+                    {canTrackPayment && onOpenPendingPayment && (
+                      <button
+                        onClick={() => onOpenPendingPayment(order)}
+                        className="w-full bg-brand-dark text-brand-gold py-3 rounded-xl font-bold text-sm tracking-wide transition active:scale-[0.98] shadow-md"
+                      >
+                        Acompanhar pagamento →
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               )}

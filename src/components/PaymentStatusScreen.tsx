@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
-import { AlertCircle, Check, CheckCircle, Clock, Copy, CreditCard, Loader2, QrCode, RefreshCw, ShieldCheck } from 'lucide-react'
+import { AlertCircle, Check, CheckCircle, Clock, Copy, CreditCard, Loader2, QrCode, RefreshCw, ShieldCheck, Store } from 'lucide-react'
 import { supabase } from '../supabaseClient'
 import { PaymentSession } from '../lib/checkoutApi'
 
@@ -46,6 +46,9 @@ export default function PaymentStatusScreen({ session, onPaid, onRetry, onOrders
   }
 
   useEffect(() => {
+    paidHandled.current = false
+    setPaymentStatus(normalizeStatus(session.paymentStatus))
+    setOrderStatus(session.orderStatus)
     refresh()
     const channel = supabase
       .channel(`payment-${session.orderId}`)
@@ -93,12 +96,16 @@ export default function PaymentStatusScreen({ session, onPaid, onRetry, onOrders
         {session.method === 'PIX' && !failed && paymentStatus !== 'paid' && (
           <div className="bg-white rounded-3xl p-6 border border-brand-gold/20 shadow-sm text-center">
             <div className="w-14 h-14 bg-brand-red/10 text-brand-red rounded-2xl flex items-center justify-center mx-auto mb-4"><QrCode size={30} /></div>
-            <h2 className="font-display text-2xl text-brand-dark">Escaneie o PIX</h2>
+            <h2 className="font-display text-2xl text-brand-dark">{session.pixQrImageUrl || session.pixCopyPaste ? 'Escaneie o PIX' : 'Aguardando pagamento PIX'}</h2>
             <p className="text-sm text-brand-dark/60 mt-2 mb-5">O pedido será liberado somente após a confirmação automática do PagBank.</p>
             {session.pixQrImageUrl ? (
               <img src={session.pixQrImageUrl} alt="QR Code PIX" className="w-64 h-64 object-contain mx-auto bg-white rounded-2xl border border-brand-gold/20 p-2" />
+            ) : session.pixCopyPaste ? (
+              <div className="w-full rounded-2xl bg-brand-cream flex items-center justify-center text-brand-dark/60 text-sm p-6">Use o código copia e cola abaixo.</div>
             ) : (
-              <div className="w-64 h-64 mx-auto rounded-2xl bg-brand-cream flex items-center justify-center text-brand-dark/50 text-sm p-8">Use o código copia e cola abaixo.</div>
+              <div className="w-full rounded-2xl bg-brand-cream flex items-center justify-center text-brand-dark/60 text-sm p-6">
+                A cobrança já foi criada. Esta tela continuará verificando automaticamente a confirmação do pagamento.
+              </div>
             )}
             {session.pixCopyPaste && (
               <button onClick={copyPix} className="w-full mt-5 bg-brand-dark text-brand-gold py-4 px-4 rounded-2xl font-bold flex items-center justify-center gap-2">
@@ -106,6 +113,22 @@ export default function PaymentStatusScreen({ session, onPaid, onRetry, onOrders
               </button>
             )}
             {session.pixExpiresAt && <p className="text-xs text-brand-dark/45 mt-3">Válido até {new Date(session.pixExpiresAt).toLocaleString('pt-BR')}</p>}
+          </div>
+        )}
+
+        {session.method === 'LOCAL' && !failed && paymentStatus !== 'paid' && (
+          <div className="bg-white rounded-3xl p-8 border border-brand-gold/20 shadow-sm text-center">
+            <div className="w-16 h-16 bg-brand-red/10 text-brand-red rounded-full flex items-center justify-center mx-auto mb-5"><Store size={30} /></div>
+            <h2 className="font-display text-3xl text-brand-dark">Aguardando pagamento na retirada</h2>
+            <p className="text-sm text-brand-dark/60 mt-3">O pedido será liberado para preparo quando o atendente confirmar o pagamento no balcão.</p>
+          </div>
+        )}
+
+        {session.method === 'UNKNOWN' && !failed && paymentStatus !== 'paid' && (
+          <div className="bg-white rounded-3xl p-8 border border-brand-gold/20 shadow-sm text-center">
+            <div className="w-16 h-16 bg-brand-red/10 text-brand-red rounded-full flex items-center justify-center mx-auto mb-5"><Clock size={30} /></div>
+            <h2 className="font-display text-3xl text-brand-dark">Aguardando confirmação</h2>
+            <p className="text-sm text-brand-dark/60 mt-3">A cobrança já foi criada e o status está sendo acompanhado automaticamente.</p>
           </div>
         )}
 
@@ -122,7 +145,13 @@ export default function PaymentStatusScreen({ session, onPaid, onRetry, onOrders
             <div className="flex items-center gap-3">
               {analyzing ? <Clock size={24} className="text-brand-gold" /> : <Loader2 size={24} className="text-brand-gold animate-spin" />}
               <div>
-                <div className="font-bold">{analyzing ? 'Aguardando análise do PagBank' : 'Aguardando confirmação'}</div>
+                <div className="font-bold">
+                  {session.method === 'LOCAL'
+                    ? 'Aguardando confirmação do atendente'
+                    : analyzing
+                      ? 'Aguardando análise do PagBank'
+                      : 'Aguardando confirmação'}
+                </div>
                 <div className="text-xs text-brand-cream/55 mt-1">Total: {money(session.totalCents)} • status interno: {orderStatus}</div>
               </div>
             </div>

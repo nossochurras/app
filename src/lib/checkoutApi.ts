@@ -33,7 +33,7 @@ export type CheckoutQuote = {
 export type PaymentSession = {
   orderId: string
   orderCode: string
-  method: PaymentMethod
+  method: PaymentMethod | 'UNKNOWN'
   paymentStatus: string
   orderStatus: string
   totalCents: number
