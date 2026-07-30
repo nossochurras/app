@@ -45,3 +45,17 @@ https://n8nwebhook.solviaoficial.com/webhook/pagbank/checkout-quote
 https://n8nwebhook.solviaoficial.com/webhook/pagbank/create-weighing-order
 https://n8nwebhook.solviaoficial.com/webhook/pagbank/create-payment
 ```
+
+## Correção de carregamento das URLs no modo de desenvolvimento
+
+Este pacote inclui `.env`, `.env.development` e `.env.production`. O comando
+`npm run dev` utiliza o modo `development`, enquanto `npm run build` utiliza o
+modo `production`. Além disso, os três endpoints públicos do n8n possuem valores
+padrão no código, evitando que o checkout seja bloqueado caso a plataforma de
+hospedagem omita arquivos ocultos durante o upload.
+
+Depois de substituir os arquivos, encerre o servidor Vite e execute novamente:
+
+```bash
+npm run dev
+```
